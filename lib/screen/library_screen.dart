@@ -42,7 +42,11 @@ class LibraryScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Library',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.black),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            color: AppColors.black,
+          ),
         ),
         backgroundColor: Colors.white,
         elevation: 0.0,
@@ -113,18 +117,25 @@ class LibraryScreen extends StatelessWidget {
                         child: Text(
                           'Gambar hilang',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 10, color: AppColors.darkGrey),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.darkGrey,
+                          ),
                         ),
                       );
                     },
                   ),
-                  const Positioned(
-                    right: 8,
+                  Positioned(
+                    right: 6,
                     bottom: 8,
-                    child: Icon(
-                      Icons.file_download_done,
-                      color: AppColors.primaryBlue,
-                      size: 20,
+                    child: CircleAvatar(
+                      backgroundColor: AppColors.softBlue,
+                      radius: 14,
+                      child: Icon(
+                        Icons.file_download_done,
+                        color: AppColors.primaryBlue,
+                        size: 18,
+                      ),
                     ),
                   ),
                 ],

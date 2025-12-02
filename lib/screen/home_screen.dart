@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:vokapedia/screen/article_detail_screen.dart';
 import 'package:vokapedia/screen/library_screen.dart';
+import 'package:vokapedia/screen/article_detail_screen.dart';
+import 'package:vokapedia/screen/searchh_screen.dart';
 import '../widget/custom_bottom_navbar.dart';
 import '../utils/color_constants.dart';
 
@@ -83,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _screens = [
     const SizedBox(),
-    const Center(child: Text('Halaman Search')),
+    const SearchhScreen(),
     const LibraryScreen(),
     const Center(child: Text('Halaman Bookmark')),
     const Center(child: Text('Halaman Profile')),
@@ -297,51 +300,65 @@ class _HomeScreenState extends State<HomeScreen> {
     required ContentItem item,
     required String listType,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Container(
-          height: 150,
-          decoration: BoxDecoration(
-            color: AppColors.backgroundLight,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.darkGrey.withOpacity(0.3)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.asset(
-              item.imagePath,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              errorBuilder: (context, error, stackTrace) {
-                return Center(
-                  child: Text(
-                    'Gagal memuat gambar',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.darkGrey,
-                    ),
-                  ),
-                );
-              },
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ArticleDetailScreen(
+              articleTitle: item.title,
+              imagePath: item.imagePath,
+              articleAuthor: 'Taufik Rahmat', 
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          item.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12),
-        ),
-        if (listType == 'reading' && item.subtitle != null)
-          Text(
-            item.subtitle!,
-            style: const TextStyle(fontSize: 12, color: AppColors.darkGrey),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            height: 150,
+            decoration: BoxDecoration(
+              color: AppColors.backgroundLight,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.darkGrey.withOpacity(0.3)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                item.imagePath,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Text(
+                      'Gagal memuat gambar',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.darkGrey,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
-      ],
+          const SizedBox(height: 8),
+          Text(
+            item.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (listType == 'reading' && item.subtitle != null)
+            Text(
+              item.subtitle!,
+              style: const TextStyle(fontSize: 12, color: AppColors.darkGrey),
+            ),
+        ],
+      ),
     );
   }
 }
