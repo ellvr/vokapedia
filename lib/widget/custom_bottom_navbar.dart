@@ -14,6 +14,7 @@ class CustomBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
+      backgroundColor: Colors.white,
       type: BottomNavigationBarType.fixed,
       currentIndex: currentIndex,
       selectedItemColor: AppColors.primaryBlue,
