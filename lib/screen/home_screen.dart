@@ -60,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   'Halo Firza!',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -68,8 +68,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   'Siap eksplor bacaan baru untuk belajar?',
                   style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
+                    fontSize: 14,
+                    color: AppColors.darkGrey,
                   ),
                 ),
               ],
