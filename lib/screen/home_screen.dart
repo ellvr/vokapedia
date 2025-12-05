@@ -1,31 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
+import 'package:vokapedia/screen/bookmark_screen.dart';
 import 'package:vokapedia/screen/library_screen.dart';
-import 'package:vokapedia/screen/article_detail_screen.dart';
 import 'package:vokapedia/screen/searchh_screen.dart';
+import 'package:vokapedia/services/firestore_services.dart';
 import '../widget/custom_bottom_navbar.dart';
 import '../utils/color_constants.dart';
 
 const double _paddingHorizontal = 15.0;
 const double _spacingVertical = 15.0;
 
-class FeaturedItem {
-  final String imagePath;
-  final String title;
-
-  FeaturedItem({required this.imagePath, this.title = ''});
-}
-
-class ContentItem {
-  final String imagePath;
-  final String title;
-  final String? subtitle;
-
-  ContentItem({required this.imagePath, required this.title, this.subtitle});
-}
-
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final int initialIndex;
+
+  const HomeScreen({super.key, this.initialIndex = 0});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -36,67 +25,29 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentPage = 0;
   final PageController _pageController = PageController(viewportFraction: 0.9);
 
-  final List<FeaturedItem> _featuredContent = [
-    FeaturedItem(imagePath: 'assets/img/content1.png'),
-    FeaturedItem(imagePath: 'assets/img/content1.png'),
-    FeaturedItem(imagePath: 'assets/img/content1.png'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController.addListener(_onPageChanged);
+  }
 
-  final List<ContentItem> _topPicksContent = [
-    ContentItem(
-      imagePath: 'assets/img/pick_1.png',
-      title: '12 Methodologies Every Developer Must Master in 2025',
-    ),
-    ContentItem(
-      imagePath: 'assets/img/pick_2.png',
-      title: 'What does it really take to reach the top 1% in 2025',
-    ),
-    ContentItem(
-      imagePath: 'assets/img/pick_3.png',
-      title: 'What is SDLC in Software Engineering?',
-    ),
-    ContentItem(
-      imagePath: 'assets/img/pick_1.png',
-      title: 'Rahasia Menjadi Ahli Full-Stack Developer',
-    ),
-  ];
+  @override
+  void dispose() {
+    _pageController.removeListener(_onPageChanged);
+    _pageController.dispose();
+    super.dispose();
+  }
 
-  final List<ContentItem> _continueReadingContent = [
-    ContentItem(
-      imagePath: 'assets/img/reading_1.png',
-      title: 'Pengenalan React Native dan Redux Toolkit',
-      subtitle: 'Part Terakhir Dibaca',
-    ),
-    ContentItem(
-      imagePath: 'assets/img/reading_2.png',
-      title: 'Optimasi Database SQL dan Indexing',
-      subtitle: 'Part Terakhir Dibaca',
-    ),
-    ContentItem(
-      imagePath: 'assets/img/reading_3.png',
-      title: 'Struktur Data dan Algoritma Dasar',
-      subtitle: 'Part Terakhir Dibaca',
-    ),
-    ContentItem(
-      imagePath: 'assets/img/reading_1.png',
-      title: 'Cara Kerja Serverless Computing',
-      subtitle: 'Part Terakhir Dibaca',
-    ),
-  ];
+  void _onPageChanged() {}
 
   final List<Widget> _screens = [
     const SizedBox(),
     const SearchhScreen(),
     const LibraryScreen(),
-    const Center(child: Text('Halaman Bookmark')),
+    const BookmarkScreen(),
     const Center(child: Text('Halaman Profile')),
   ];
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -115,16 +66,16 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 10),
               _buildFeaturedContent(),
               _buildSectionTitle(title: 'Top picks for you'),
-              _buildHorizontalList(
+              _buildArticlesList(
+                stream: getArticlesByFeature(field: 'isTopPick', value: true),
                 height: 200,
-                count: _topPicksContent.length,
-                listType: 'picks',
               ),
               _buildSectionTitle(title: 'Continue reading'),
-              _buildHorizontalList(
+              _buildArticlesList(
+                stream:
+                    getContinueReadingArticles(), // Memanggil fungsi yang sudah difilter
                 height: 220,
-                count: _continueReadingContent.length,
-                listType: 'reading',
+                isReadingList: true,
               ),
               const SizedBox(height: 50),
             ],
@@ -134,65 +85,64 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildArticlesList({
+    required Stream<List<Article>> stream,
+    required double height,
+    bool isReadingList = false,
+  }) {
+    return StreamBuilder<List<Article>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return SizedBox(
+            height: height,
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(horizontal: _paddingHorizontal),
+            child: Text('Belum ada artikel di bagian ini.'),
+          );
+        }
+
+        final articles = snapshot.data!;
+
+        return SizedBox(
+          height: height,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: articles.length,
+            padding: const EdgeInsets.symmetric(horizontal: _paddingHorizontal),
+            itemBuilder: (context, index) {
+              final item = articles[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 15.0),
+                child: SizedBox(
+                  width: 150,
+                  child: _buildContentCard(
+                    item: item,
+                    isReadingList: isReadingList,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isHome = _currentIndex == 0;
 
     return Scaffold(
       backgroundColor: AppColors.white,
-
-      appBar: isHome
-          ? AppBar(
-              backgroundColor: Colors.white,
-              elevation: 2.0,
-              shadowColor: AppColors.darkGrey.withOpacity(0.3),
-              toolbarHeight: 80,
-              surfaceTintColor: Colors.transparent,
-              scrolledUnderElevation: 2.0,
-              title: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: _paddingHorizontal),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const <Widget>[
-                          Text(
-                            'Halo Firza!',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.black,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Siap eksplor bacaan baru untuk belajar?',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.darkGrey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: _paddingHorizontal),
-                    child: const CircleAvatar(
-                      radius: 24,
-                      backgroundImage: AssetImage('assets/img/pp.jpg'),
-                    ),
-                  ),
-                ],
-              ),
-              automaticallyImplyLeading: false,
-            )
-          : null,
-
+      appBar: isHome ? _buildHomeAppBar() : null,
       body: isHome ? _buildHomeBody(context) : _screens[_currentIndex],
-
       bottomNavigationBar: CustomBottomNavBar(
         currentIndex: _currentIndex,
         onTap: _onItemTapped,
@@ -200,54 +150,126 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFeaturedContent() {
-    return Column(
-      children: <Widget>[
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 150,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: _featuredContent.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
-            },
-            itemBuilder: (context, index) {
-              final item = _featuredContent[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    decoration: const BoxDecoration(color: AppColors.softBlue),
-                    child: Image.asset(
-                      item.imagePath,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Text(
-                            'Gambar tidak ditemukan',
-                            style: TextStyle(color: AppColors.white),
-                          ),
-                        );
-                      },
+  AppBar _buildHomeAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 2.0,
+      shadowColor: AppColors.darkGrey.withOpacity(0.3),
+      toolbarHeight: 80,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 2.0,
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: _paddingHorizontal),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const <Widget>[
+                  Text(
+                    'Halo Firza!',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.black,
                     ),
                   ),
-                ),
-              );
-            },
+                  SizedBox(height: 4),
+                  Text(
+                    'Siap eksplor bacaan baru untuk belajar?',
+                    style: TextStyle(fontSize: 14, color: AppColors.darkGrey),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10.0),
-          child: _DotIndicator(
-            count: _featuredContent.length,
-            currentIndex: _currentPage,
+          Padding(
+            padding: const EdgeInsets.only(right: _paddingHorizontal),
+            child: const CircleAvatar(
+              radius: 24,
+              backgroundImage: AssetImage('assets/img/pp.jpg'),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
+      automaticallyImplyLeading: false,
+    );
+  }
+
+  Widget _buildFeaturedContent() {
+    return StreamBuilder<List<Article>>(
+      stream: getArticlesByFeature(field: 'isFeatured', value: true),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 150,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final featuredContent = snapshot.data!;
+
+        return Column(
+          children: <Widget>[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 150,
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: featuredContent.length,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentPage = index;
+                  });
+                },
+                itemBuilder: (context, index) {
+                  final item = featuredContent[index];
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ArticleDetailScreen(articleId: item.id),
+                        ),
+                      );
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        item.imagePath,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: AppColors.softBlue,
+                            child: const Center(
+                              child: Text(
+                                'Gambar tidak ditemukan',
+                                style: TextStyle(color: AppColors.white),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10.0),
+              child: _DotIndicator(
+                count: featuredContent.length,
+                currentIndex: _currentPage,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -266,50 +288,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildHorizontalList({
-    required double height,
-    required int count,
-    required String listType,
-  }) {
-    return SizedBox(
-      height: height,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: count,
-        padding: const EdgeInsets.symmetric(horizontal: _paddingHorizontal),
-        itemBuilder: (context, index) {
-          ContentItem item;
-          if (listType == 'picks') {
-            item = _topPicksContent[index];
-          } else {
-            item = _continueReadingContent[index];
-          }
-          return Padding(
-            padding: const EdgeInsets.only(right: 15.0),
-            child: SizedBox(
-              width: 150,
-              child: _buildContentCard(item: item, listType: listType),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   Widget _buildContentCard({
-    required ContentItem item,
-    required String listType,
+    required Article item,
+    required bool isReadingList,
   }) {
+    final double progress = item.readingProgress?.toDouble() ?? 0.0;
+    final int percentage = (progress * 100).toInt();
+
+    final String subtitleText = isReadingList && progress > 0
+        ? 'Progress: $percentage%'
+        : item.author;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ArticleDetailScreen(
-              articleTitle: item.title,
-              imagePath: item.imagePath,
-              articleAuthor: 'Taufik Rahmat', 
-            ),
+            builder: (context) => ArticleDetailScreen(articleId: item.id),
           ),
         );
       },
@@ -325,20 +320,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
+              child: Image.network(
                 item.imagePath,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
                 errorBuilder: (context, error, stackTrace) {
-                  return Center(
+                  return const Center(
                     child: Text(
                       'Gagal memuat gambar',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.darkGrey,
-                      ),
+                      style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
                     ),
                   );
                 },
@@ -352,9 +344,9 @@ class _HomeScreenState extends State<HomeScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12),
           ),
-          if (listType == 'reading' && item.subtitle != null)
+          if (isReadingList)
             Text(
-              item.subtitle!,
+              subtitleText,
               style: const TextStyle(fontSize: 12, color: AppColors.darkGrey),
             ),
         ],

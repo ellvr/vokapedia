@@ -1,39 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/utils/color_constants.dart';
-
-class ContentItem {
-  final String imagePath;
-  final String title;
-  final String? subtitle;
-
-  ContentItem({required this.imagePath, required this.title, this.subtitle});
-}
-
-final List<ContentItem> _libraryContent = [
-  ContentItem(
-    imagePath: 'assets/img/reading_1.png',
-    title: '12 Methodologies Every Developer Must Master in 2025',
-  ),
-  ContentItem(
-    imagePath: 'assets/img/reading_2.png',
-    title: 'Data-Driven or Intuition-Base Decision',
-  ),
-  ContentItem(
-    imagePath: 'assets/img/reading_3.png',
-    title: 'What does it really take to reach the top 1% in 2025',
-  ),
-  ContentItem(
-    imagePath: 'assets/img/pick_1.png',
-    title: 'All about product manager! What is t..',
-  ),
-  ContentItem(
-    imagePath: 'assets/img/pick_2.png',
-    title: 'Data-Driven or Intuition-Base Dec..',
-  ),
-];
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
+
+  Stream<List<Article>> _getLibraryItems() {
+    return FirebaseFirestore.instance
+        .collection('saved_articles')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+          .toList();
+    });
+  }
+
+  void _removeItem(BuildContext context, String articleId) {
+    FirebaseFirestore.instance
+        .collection('saved_articles')
+        .doc(articleId)
+        .delete();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Item dihapus dari Library.'),
+        duration: Duration(seconds: 1),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,112 +39,193 @@ class LibraryScreen extends StatelessWidget {
         title: const Text(
           'Library',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
             fontSize: 20,
+            fontWeight: FontWeight.bold,
             color: AppColors.black,
           ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0.0,
+        backgroundColor: AppColors.white,
+        elevation: 0,
         automaticallyImplyLeading: false,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text(
-              'Available Offline',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: AppColors.black,
+      body: StreamBuilder<List<Article>>(
+        stream: _getLibraryItems(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          final libraryItems = snapshot.data ?? [];
+
+          if (libraryItems.isEmpty) {
+            return const Center(
+              child: Text(
+                'Library masih kosong. Yuk, tambahkan artikel!',
+                style: TextStyle(color: AppColors.darkGrey),
               ),
-            ),
-            const SizedBox(height: 15),
-            _buildContentGrid(context),
-            const SizedBox(height: 50),
-          ],
-        ),
-      ),
-    );
-  }
+            );
+          }
 
-  Widget _buildContentGrid(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 18.0,
-        mainAxisSpacing: 25.0,
-        childAspectRatio: 0.65,
-      ),
-      itemCount: _libraryContent.length,
-      itemBuilder: (context, index) {
-        final item = _libraryContent[index];
-        return _buildGridCard(item);
-      },
-    );
-  }
-
-  Widget _buildGridCard(ContentItem item) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.backgroundLight,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.darkGrey.withOpacity(0.2)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Stack(
+          return SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 10.0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Image.asset(
-                    item.imagePath,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Center(
-                        child: Text(
-                          'Gambar hilang',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.darkGrey,
-                          ),
-                        ),
-                      );
-                    },
+                  const Text(
+                    'Available Offline',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  Positioned(
-                    right: 6,
-                    bottom: 8,
-                    child: CircleAvatar(
-                      backgroundColor: AppColors.softBlue,
-                      radius: 14,
-                      child: Icon(
-                        Icons.file_download_done,
-                        color: AppColors.primaryBlue,
-                        size: 18,
-                      ),
+                  const SizedBox(height: 10),
+                  GridView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    shrinkWrap: true,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 15.0,
+                      mainAxisSpacing: 15.0,
+                      childAspectRatio: 0.6,
                     ),
+                    itemCount: libraryItems.length,
+                    itemBuilder: (context, index) {
+                      final item = libraryItems[index];
+                      return _buildGridCard(context, item);
+                    },
                   ),
                 ],
               ),
             ),
-          ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildGridCard(BuildContext context, Article item) {
+    final double progress = item.readingProgress?.toDouble() ?? 0.0;
+    
+    final bool isFinished = progress >= 1.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Stack(
+          children: [
+            Container(
+              height: 180,
+              decoration: BoxDecoration(
+                color: AppColors.backgroundLight,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.darkGrey.withOpacity(0.2)),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  item.imagePath,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: AppColors.darkGrey.withOpacity(0.1),
+                      child: const Center(
+                        child: Icon(
+                          Icons.broken_image,
+                          color: AppColors.darkGrey,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.white.withOpacity(0.9),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(10),
+                    bottomRight: Radius.circular(10),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: SizedBox(
+                          height: 8,
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            backgroundColor: AppColors.darkGrey.withOpacity(0.3),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              isFinished ? AppColors.primaryBlue : AppColors.primaryBlue,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    isFinished
+                        ? const Icon(
+                            Icons.check_circle,
+                            size: 20,
+                            color: AppColors.primaryBlue,
+                          )
+                        : const Icon(
+                            Icons.menu_book, 
+                            size: 20,
+                            color: AppColors.black,
+                          ),
+                  ],
+                ),
+              ),
+            ),
+
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () => _removeItem(context, item.id),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.white.withOpacity(0.8),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: Colors.red,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         Text(
           item.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: 14),
         ),
       ],
     );

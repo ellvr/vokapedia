@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1037445017430",
+    "project_id": "vokapedia",
+    "storage_bucket": "vokapedia.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1037445017430:android:7d1f1ce5283c8f5e0cf0f7",
+        "android_client_info": {
+          "package_name": "com.example.vokapedia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtwSmsOEP08jJGOnx4-fDuqPB27dYWPkg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
