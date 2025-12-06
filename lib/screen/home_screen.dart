@@ -97,7 +97,12 @@ class _HomeScreenState extends State<HomeScreen> {
           return SizedBox(
             height: height,
             child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.black,
+                ),
+              ),
             ),
           );
         }
@@ -204,7 +209,14 @@ class _HomeScreenState extends State<HomeScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             height: 150,
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            child: Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.black,
+                ),
+              ),
+            ),
           );
         }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {

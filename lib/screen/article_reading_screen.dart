@@ -46,6 +46,7 @@ class ArticleReadingScreen extends StatefulWidget {
   final String articleTitle;
   final String articleAuthor;
   final String imagePath;
+  final double initialProgress; 
 
   const ArticleReadingScreen({
     super.key,
@@ -53,6 +54,7 @@ class ArticleReadingScreen extends StatefulWidget {
     required this.articleTitle,
     required this.articleAuthor,
     required this.imagePath,
+    this.initialProgress = 0.0,
   });
 
   @override
@@ -62,12 +64,14 @@ class ArticleReadingScreen extends StatefulWidget {
 class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
   ReadingTheme _currentTheme = ReadingTheme.light;
   bool _isThemeSelectorVisible = false;
-
+  
   int _currentPageIndex = 0;
   final int _wordsPerPage = 800;
+  
+  int _totalPages = 1;
 
   ThemeColors get _colors => themeMap[_currentTheme]!;
-
+  
   @override
   void initState() {
     super.initState();
@@ -86,14 +90,49 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          'Anda telah selesai membaca artikel ini! Progress disimpan.',
-        ),
+        content: Text('Anda telah selesai membaca artikel ini! Progress disimpan.'),
         duration: Duration(seconds: 2),
       ),
     );
 
     Navigator.pop(context);
+  }
+  
+  Future<void> _saveBookmark(String selectedText) async {
+    if (selectedText.trim().isEmpty) {
+      return;
+    }
+
+    const String userId = 'user123'; 
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('user_bookmarks')
+          .add({
+            'userId': userId,
+            'articleId': widget.articleId,
+            'articleTitle': widget.articleTitle,
+            'articleAuthor': widget.articleAuthor, 
+            'highlightedText': selectedText,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Berhasil disimpan ke Bookmark!'),
+          duration: const Duration(seconds: 2),
+          backgroundColor: AppColors.black,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan bookmark: $e'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<Article> _fetchArticleDetail() async {
@@ -125,10 +164,21 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
   }
 
   void _goToPage(int newIndex) {
-    if (newIndex >= 0) {
+    if (newIndex >= 0 && newIndex < _totalPages) {
       setState(() {
         _currentPageIndex = newIndex;
+        _saveReadingProgress(newIndex, _totalPages); 
       });
+    }
+  }
+  
+  Future<void> _saveReadingProgress(int currentPage, int totalPages) async {
+    if (totalPages > 0) {
+      final double progress = (currentPage + 1) / totalPages;
+      await FirebaseFirestore.instance
+          .collection('saved_articles')
+          .doc(widget.articleId)
+          .set({'readingProgress': progress}, SetOptions(merge: true));
     }
   }
 
@@ -174,7 +224,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                     borderRadius: BorderRadius.circular(5),
                     border: Border.all(
                       color: isSelected
-                          ? AppColors.primaryBlue
+                          ? AppColors.black
                           : AppColors.darkGrey.withOpacity(0.3),
                       width: isSelected ? 3.0 : 1.0,
                     ),
@@ -187,38 +237,65 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
       ),
     );
   }
-
+  
   List<String> _getAllWords(Article article) {
     String fullContent = '';
-
-    article.sections.forEach((section) {
-      fullContent +=
-          (section['sectionTitle'] ?? '') +
-          ' ' +
-          (section['content'] ?? '') +
-          ' ';
-    });
-
+    
+    for (var section in article.sections) {
+       fullContent += (section['sectionTitle'] ?? '') + ' ' + (section['content'] ?? '') + ' ';
+    }
+    
     return fullContent.trim().split(RegExp(r'\s+'));
+  }
+
+  Widget _customContextMenuBuilder(BuildContext context, EditableTextState editableTextState) {
+    final List<ContextMenuButtonItem> buttonItems = [
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.copySelection(SelectionChangedCause.toolbar);
+          editableTextState.hideToolbar();
+        },
+        type: ContextMenuButtonType.copy,
+      ),
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.selectAll(SelectionChangedCause.toolbar);
+        },
+        type: ContextMenuButtonType.selectAll,
+      ),
+      ContextMenuButtonItem(
+        onPressed: () {
+          final selectedText = editableTextState.textEditingValue.text.substring(
+            editableTextState.textEditingValue.selection.start,
+            editableTextState.textEditingValue.selection.end,
+          );
+          _saveBookmark(selectedText);
+          editableTextState.hideToolbar();
+        },
+        label: 'Bookmark',
+      ),
+    ];
+    
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      buttonItems: buttonItems,
+      anchors: editableTextState.contextMenuAnchors,
+    );
   }
 
   Widget _buildArticleContent(Article article) {
     final List<String> allWords = _getAllWords(article);
     final int totalWords = allWords.length;
-
-    final int totalPages = (totalWords / _wordsPerPage).ceil();
+    
+    _totalPages = (totalWords / _wordsPerPage).ceil();
 
     final int startIndex = _currentPageIndex * _wordsPerPage;
-    final int endIndex = ((_currentPageIndex + 1) * _wordsPerPage).clamp(
-      0,
-      totalWords,
-    );
-
+    final int endIndex = ((_currentPageIndex + 1) * _wordsPerPage).clamp(0, totalWords);
+    
     final List<String> wordsToShow = allWords.sublist(startIndex, endIndex);
     final String pageContent = wordsToShow.join(' ');
-
-    final double readingProgress = (totalPages > 0)
-        ? (_currentPageIndex + 1) / totalPages
+    
+    final double readingProgress = (_totalPages > 0) 
+        ? (_currentPageIndex + 1) / _totalPages 
         : 1.0;
 
     return Column(
@@ -256,77 +333,57 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                         height: 200,
                         loadingBuilder: (context, child, loadingProgress) {
                           if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(strokeWidth: 1.5),
-                          );
+                          return const Center(child: CircularProgressIndicator(strokeWidth: 1.5, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue)));
                         },
                         errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            height: 200,
-                            color: AppColors.backgroundLight,
-                            child: const Center(
-                              child: Text(
-                                'Cover Image Placeholder',
-                                style: TextStyle(color: AppColors.darkGrey),
-                              ),
-                            ),
-                          );
+                          return Container(height: 200, color: AppColors.backgroundLight, child: const Center(child: Text('Cover Image Placeholder', style: TextStyle(color: AppColors.darkGrey))));
                         },
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20.0,
-                      vertical: 10.0,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
                     child: Text(
                       article.title,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        height: 1.3,
-                        color: _colors.text,
-                      ),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.3, color: _colors.text),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(
-                      left: 20.0,
-                      top: 5.0,
-                      bottom: 15.0,
-                    ),
+                    padding: const EdgeInsets.only(left: 20.0, top: 5.0, bottom: 15.0),
                     child: Text(
                       article.author,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: _colors.text.withOpacity(0.6),
-                      ),
+                      style: TextStyle(fontSize: 14, color: _colors.text.withOpacity(0.6)),
                     ),
                   ),
                 ] else ...[
                   const SizedBox(height: 10),
                 ],
-
+                
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20.0,
-                    vertical: 10.0,
-                  ),
-                  child: Text(
-                    pageContent,
-                    style: TextStyle(
-                      fontSize: 16,
-                      height: 1.6,
-                      color: _colors.text,
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      // --- PERBAIKAN DI SINI ---
+                      textSelectionTheme: TextSelectionThemeData(
+                        // Menggunakan selectionColor (untuk warna sorotan)
+                        selectionColor: AppColors.primaryBlue.withOpacity(0.4), 
+                        // Menggunakan selectionHandleColor (untuk warna handle)
+                        selectionHandleColor: AppColors.primaryBlue, 
+                      ),
+                      // --- AKHIR PERBAIKAN ---
                     ),
-                    textAlign: TextAlign.justify,
+                    child: SelectableText(
+                      pageContent,
+                      style: TextStyle(fontSize: 16, height: 1.6, color: _colors.text),
+                      textAlign: TextAlign.justify,
+                      contextMenuBuilder: _customContextMenuBuilder,
+                    ),
                   ),
                 ),
 
                 const SizedBox(height: 30),
 
-                _buildPaginationButtons(totalPages),
+                _buildPaginationButtons(_totalPages),
 
                 const SizedBox(height: 20),
               ],
@@ -347,25 +404,14 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           OutlinedButton.icon(
-            onPressed: isFirstPage
-                ? null
-                : () => _goToPage(_currentPageIndex - 1),
-            icon: Icon(
-              Icons.arrow_back,
-              color: isFirstPage ? AppColors.darkGrey : AppColors.primaryBlue,
-            ),
+            onPressed: isFirstPage ? null : () => _goToPage(_currentPageIndex - 1),
+            icon: Icon(Icons.arrow_back, color: isFirstPage ? AppColors.darkGrey : AppColors.black),
             label: Text(
               'Previous',
-              style: TextStyle(
-                color: isFirstPage ? AppColors.darkGrey : AppColors.primaryBlue,
-              ),
+              style: TextStyle(color: isFirstPage ? AppColors.darkGrey : AppColors.black),
             ),
             style: OutlinedButton.styleFrom(
-              side: BorderSide(
-                color: isFirstPage
-                    ? AppColors.darkGrey.withOpacity(0.5)
-                    : AppColors.primaryBlue,
-              ),
+              side: BorderSide(color: isFirstPage ? AppColors.darkGrey.withOpacity(0.5) : AppColors.black),
             ),
           ),
 
@@ -378,22 +424,17 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
             onPressed: isLastPage
                 ? _markAsFinishedAndPop
                 : () => _goToPage(_currentPageIndex + 1),
-
+            
             icon: Icon(
               isLastPage ? Icons.done : Icons.arrow_forward,
               color: AppColors.white,
             ),
             label: Text(
               isLastPage ? 'Finish' : 'Next',
-              style: const TextStyle(
-                color: AppColors.white,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.bold),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isLastPage
-                  ? Colors.green
-                  : AppColors.primaryBlue,
+              backgroundColor: isLastPage ? AppColors.primaryBlue : AppColors.black,
               foregroundColor: AppColors.white,
             ),
           ),
@@ -432,62 +473,64 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
             onPressed: _toggleThemeSelector,
           ),
           IconButton(
-            icon: Icon(Icons.menu, color: _colors.icon),
-            onPressed: () {},
+            icon: Icon(Icons.menu_book, color: _colors.icon),
+            onPressed: () {
+               // Tambahkan logika untuk membuka menu bookmark/highlight
+            },
           ),
         ],
       ),
       body: Column(
-        children: [
-          AnimatedSize(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            child: Visibility(
-              visible: _isThemeSelectorVisible,
-              maintainState: true,
-              child: _buildThemeSelectorPanel(),
-            ),
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                FutureBuilder<Article>(
-                  future: _fetchArticleDetail(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Text(
-                            'Gagal memuat artikel. Error: ${snapshot.error}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.black),
-                          ),
-                        ),
-                      );
-                    }
-                    if (!snapshot.hasData) {
-                      return const Center(
-                        child: Text('Konten artikel tidak ditemukan.'),
-                      );
-                    }
-
-                    return _buildArticleContent(snapshot.data!);
-                  },
+            children: [
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                child: Visibility(
+                  visible: _isThemeSelectorVisible,
+                  maintainState: true,
+                  child: _buildThemeSelectorPanel(),
                 ),
-                if (_isThemeSelectorVisible)
-                  GestureDetector(
-                    onTap: _toggleThemeSelector,
-                    child: Container(color: Colors.black54.withOpacity(0.4)),
-                  ),
-              ],
-            ),
+              ),
+              Expanded(
+                child: Stack(
+                  children: [
+                    FutureBuilder<Article>(
+                      future: _fetchArticleDetail(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20.0),
+                              child: Text(
+                                'Gagal memuat artikel. Error: ${snapshot.error}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppColors.black),
+                              ),
+                            ),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(child: Text('Konten artikel tidak ditemukan.'));
+                        }
+
+                        return _buildArticleContent(snapshot.data!);
+                      },
+                    ),
+                    if (_isThemeSelectorVisible)
+                      GestureDetector(
+                        onTap: _toggleThemeSelector,
+                        child: Container(
+                          color: Colors.black54.withOpacity(0.4),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }
