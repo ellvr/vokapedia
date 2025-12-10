@@ -18,7 +18,7 @@ class BookmarkScreen extends StatelessWidget {
         .snapshots()
         .map((snapshot) {
       return snapshot.docs
-          .map((doc) => BookmarkItem.fromFirestore(doc.data() as Map<String, dynamic>, doc.id))
+          .map((doc) => BookmarkItem.fromFirestore(doc.data(), doc.id))
           .toList();
     });
   }

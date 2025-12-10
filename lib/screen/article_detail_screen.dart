@@ -61,7 +61,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     
     // Gabungkan konten abstract jika ada
     if (article.abstractContent != null && article.abstractContent!.isNotEmpty) {
-      fullContent += article.abstractContent! + '\n\n';
+      fullContent += '${article.abstractContent!}\n\n';
     }
 
     // Gabungkan semua konten dari sections
