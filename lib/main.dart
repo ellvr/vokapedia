@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:vokapedia/services/hive_local_storage_services.dart';
 import 'firebase_options.dart';
 
 import 'screen/home_screen.dart';

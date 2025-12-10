@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
@@ -99,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: const AlwaysStoppedAnimation<Color>(
+                valueColor: AlwaysStoppedAnimation<Color>(
                   AppColors.black,
                 ),
               ),
@@ -212,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: const AlwaysStoppedAnimation<Color>(
+                valueColor: AlwaysStoppedAnimation<Color>(
                   AppColors.black,
                 ),
               ),

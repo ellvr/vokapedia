@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:vokapedia/screen/article_reading_screen.dart';
@@ -18,7 +20,7 @@ class BookmarkScreen extends StatelessWidget {
         .snapshots()
         .map((snapshot) {
       return snapshot.docs
-          .map((doc) => BookmarkItem.fromFirestore(doc.data() as Map<String, dynamic>, doc.id))
+          .map((doc) => BookmarkItem.fromFirestore(doc.data(), doc.id))
           .toList();
     });
   }
