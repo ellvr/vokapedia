@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously, prefer_interpolation_to_compose_strings, deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:vokapedia/models/article_model.dart';
@@ -19,7 +21,7 @@ class ArticleDetailScreen extends StatefulWidget {
 }
 
 class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
-  bool _isAbstractExpanded = false;
+  final bool _isAbstractExpanded = false;
   bool _isArticleSaved = false; 
 
   @override
@@ -49,22 +51,14 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     return Article.fromFirestore(doc.data() as Map<String, dynamic>, doc.id);
   }
 
-  void _toggleAbstractExpansion() {
-    setState(() {
-      _isAbstractExpanded = true;
-    });
-  }
   
-  // Fungsi baru untuk menggabungkan dan memotong konten utama artikel
   String _getArticleContentPreview(Article article, {int wordLimit = 50}) {
     String fullContent = '';
     
-    // Gabungkan konten abstract jika ada
     if (article.abstractContent != null && article.abstractContent!.isNotEmpty) {
       fullContent += '${article.abstractContent!}\n\n';
     }
 
-    // Gabungkan semua konten dari sections
     for (var section in article.sections) {
        fullContent += (section['sectionTitle'] ?? '') + ' ' + (section['content'] ?? '') + ' ';
     }
@@ -172,8 +166,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     final buttonIcon = _isArticleSaved ? Icons.check : Icons.add;
     final buttonText = _isArticleSaved ? 'Saved' : 'Library';
     final buttonColor = _isArticleSaved ? AppColors.black : AppColors.black;
-    // Hitung jumlah kata pada konten penuh
-    final fullContentWords = _getArticleContentPreview(article, wordLimit: 99999).split(RegExp(r'\s+')).length;
 
     return Stack(
       children: [
