@@ -56,7 +56,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     String fullContent = '';
     
     if (article.abstractContent != null && article.abstractContent!.isNotEmpty) {
-      fullContent += article.abstractContent! + '\n\n';
+      fullContent += '${article.abstractContent!}\n\n';
     }
 
     for (var section in article.sections) {

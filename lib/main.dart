@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:vokapedia/services/hive_local_storage_services.dart';
 import 'firebase_options.dart';
 
 import 'screen/home_screen.dart';
@@ -20,7 +21,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomeScreen(),
+      // home: HomeScreen(),
+      home: SplashScreen(),
       theme: ThemeData(fontFamily: 'PlayfairDisplay', useMaterial3: true),
     );
   }
