@@ -15,7 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final _formKey = GlobalKey<FormState>(); // Key untuk validasi form
+  final _formKey = GlobalKey<FormState>();
   String _errorMessage = '';
   bool _isLoading = false;
 

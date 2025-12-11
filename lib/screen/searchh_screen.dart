@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:vokapedia/services/firestore_services.dart';
 import 'package:vokapedia/models/article_model.dart';
