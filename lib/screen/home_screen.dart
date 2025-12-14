@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
-
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
@@ -57,6 +58,67 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // ================================
+  // ⚙️ FUNGSI UNTUK MENANGANI LOGIKA GAMBAR (BARU)
+  // ================================
+  Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
+    bool isNetworkUrl =
+        imagePath.startsWith('http://') || imagePath.startsWith('https://');
+    bool isBase64Data = imagePath.length > 100 && !isNetworkUrl;
+
+    Widget imageWidget;
+
+    if (isNetworkUrl) {
+      imageWidget = Image.network(
+        imagePath,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: AppColors.backgroundLight,
+            child: const Center(
+              child: Icon(Icons.broken_image, size: 30, color: AppColors.darkGrey),
+            ),
+          );
+        },
+      );
+    } else if (isBase64Data) {
+      try {
+        String base64String = imagePath.contains(',')
+            ? imagePath.split(',').last
+            : imagePath;
+
+        Uint8List imageBytes = base64Decode(base64String);
+
+        imageWidget = Image.memory(
+          imageBytes,
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+        );
+      } catch (e) {
+        // Fallback jika konversi Base64 gagal
+        debugPrint('Base64 Decode Error in Home: $e');
+        imageWidget = Container(
+          color: AppColors.backgroundLight,
+          child: const Center(
+            child: Icon(Icons.error_outline, size: 30, color: AppColors.darkGrey),
+          ),
+        );
+      }
+    } else {
+      // Path kosong atau tidak valid
+      imageWidget = Container(
+        color: AppColors.backgroundLight,
+        child: const Center(
+          child: Icon(Icons.image_not_supported, size: 30, color: AppColors.darkGrey),
+        ),
+      );
+    }
+    return imageWidget;
+  }
+
   Widget _buildHomeBody(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
@@ -75,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildSectionTitle(title: 'Continue reading'),
               _buildArticlesList(
                 stream:
-                    getContinueReadingArticles(), // Memanggil fungsi yang sudah difilter
+                    getContinueReadingArticles(), 
                 height: 220,
                 isReadingList: true,
               ),
@@ -254,20 +316,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
+                      // 👇 PANGGIL FUNGSI IMAGE BARU
+                      child: _buildArticleImage(
                         item.imagePath,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: AppColors.softBlue,
-                            child: const Center(
-                              child: Text(
-                                'Gambar tidak ditemukan',
-                                style: TextStyle(color: AppColors.white),
-                              ),
-                            ),
-                          );
-                        },
+                        width: double.infinity,
+                        height: double.infinity,
                       ),
                     ),
                   );
@@ -334,20 +387,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.network(
+              // 👇 PANGGIL FUNGSI IMAGE BARU
+              child: _buildArticleImage(
                 item.imagePath,
-                fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Text(
-                      'Gagal memuat gambar',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
-                    ),
-                  );
-                },
               ),
             ),
           ),

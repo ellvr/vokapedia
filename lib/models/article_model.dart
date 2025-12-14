@@ -11,6 +11,7 @@ class Article {
   final bool isTopPick;
   final num? readingProgress;
   final Timestamp? createdAt;
+  final Timestamp? updatedAt;
 
   Article({
     required this.id,
@@ -23,6 +24,7 @@ class Article {
     required this.createdAt,
     this.abstractContent,
     this.readingProgress,
+    this.updatedAt,
   });
 
   factory Article.fromFirestore(Map<String, dynamic> data, String documentId) {

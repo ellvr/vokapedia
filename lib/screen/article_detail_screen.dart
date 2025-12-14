@@ -7,6 +7,8 @@ import 'package:vokapedia/screen/article_reading_screen.dart';
 import 'package:vokapedia/screen/home_screen.dart';
 import 'package:vokapedia/utils/color_constants.dart';
 import 'dart:async';
+import 'dart:convert'; // Wajib untuk Base64
+import 'dart:typed_data'; // Wajib untuk Uint8List
 
 class ArticleDetailScreen extends StatefulWidget {
   final String articleId;
@@ -22,7 +24,7 @@ class ArticleDetailScreen extends StatefulWidget {
 
 class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   final bool _isAbstractExpanded = false;
-  bool _isArticleSaved = false; 
+  bool _isArticleSaved = false;
 
   @override
   void initState() {
@@ -30,12 +32,85 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     _checkIfSaved();
   }
 
+  // ================================
+  // ⚙️ FUNGSI UNTUK MENANGANI LOGIKA GAMBAR (DIAMBIL DARI HOMESCREEN)
+  // ================================
+  Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
+    bool isNetworkUrl =
+        imagePath.startsWith('http://') || imagePath.startsWith('https://');
+    bool isBase64Data = imagePath.length > 100 && !isNetworkUrl;
+
+    Widget imageWidget;
+
+    if (isNetworkUrl) {
+      imageWidget = Image.network(
+        imagePath,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        // Menggunakan errorBuilder bawaan Image.network, namun kita tambahkan logic loading/error.
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const Center(child: CircularProgressIndicator(strokeWidth: 1.5, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue)));
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: AppColors.backgroundLight,
+            child: const Center(
+              child: Text(
+                'Gagal memuat cover',
+                style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
+              ),
+            ),
+          );
+        },
+      );
+    } else if (isBase64Data) {
+      try {
+        String base64String = imagePath.contains(',')
+            ? imagePath.split(',').last
+            : imagePath;
+
+        Uint8List imageBytes = base64Decode(base64String);
+
+        imageWidget = Image.memory(
+          imageBytes,
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+        );
+      } catch (e) {
+        // Fallback jika konversi Base64 gagal
+        debugPrint('Base64 Decode Error in Detail: $e');
+        imageWidget = Container(
+          color: AppColors.backgroundLight,
+          child: const Center(
+            child: Icon(Icons.error_outline, size: 40, color: AppColors.darkGrey),
+          ),
+        );
+      }
+    } else {
+      // Path kosong atau tidak valid
+      imageWidget = Container(
+        color: AppColors.backgroundLight,
+        child: const Center(
+          child: Text(
+            'Cover Image Placeholder',
+            style: TextStyle(color: AppColors.darkGrey),
+          ),
+        ),
+      );
+    }
+    return imageWidget;
+  }
+  // =========================================================
+
   Future<void> _checkIfSaved() async {
     final doc = await FirebaseFirestore.instance
         .collection('saved_articles')
         .doc(widget.articleId)
         .get();
-    
+
     if (mounted) {
       setState(() {
         _isArticleSaved = doc.exists;
@@ -44,43 +119,48 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   }
 
   Future<Article> _fetchArticleDetail() async {
-    final doc = await FirebaseFirestore.instance.collection('articles').doc(widget.articleId).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('articles')
+        .doc(widget.articleId)
+        .get();
     if (!doc.exists) {
       throw Exception("Article not found in database.");
     }
     return Article.fromFirestore(doc.data() as Map<String, dynamic>, doc.id);
   }
 
-  
   String _getArticleContentPreview(Article article, {int wordLimit = 50}) {
     String fullContent = '';
-    
+
     if (article.abstractContent != null && article.abstractContent!.isNotEmpty) {
       fullContent += '${article.abstractContent!}\n\n';
     }
 
+    // Menggabungkan konten bagian-bagian (sections)
     for (var section in article.sections) {
-       fullContent += (section['sectionTitle'] ?? '') + ' ' + (section['content'] ?? '') + ' ';
+      fullContent +=
+          (section['heading'] ?? '') + ' ' + (section['paragraphs'] ?? '') + ' ';
     }
-    
+
     if (fullContent.trim().isEmpty) {
       return 'Konten artikel belum tersedia.';
     }
 
     final words = fullContent.trim().split(RegExp(r'\s+'));
-    
+
     if (words.length <= wordLimit) {
       return fullContent.trim();
     }
-    
+
     final preview = words.sublist(0, wordLimit).join(' ');
-    
+
     return '$preview...';
   }
 
   Future<void> _toggleLibraryStatus(Article article) async {
-    final docRef = FirebaseFirestore.instance.collection('saved_articles').doc(article.id);
-    
+    final docRef =
+        FirebaseFirestore.instance.collection('saved_articles').doc(article.id);
+
     if (_isArticleSaved) {
       await docRef.delete();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -98,7 +178,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         'savedAt': FieldValue.serverTimestamp(),
         'readingProgress': 0.0,
       }, SetOptions(merge: true));
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Berhasil ditambahkan ke Library!'),
@@ -107,13 +187,13 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         ),
       );
     }
-    
+
     setState(() {
       _isArticleSaved = !_isArticleSaved;
     });
 
     if (_isArticleSaved) {
-       Navigator.pushAndRemoveUntil(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (context) => const HomeScreen(initialIndex: 2),
@@ -137,8 +217,12 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           },
         ),
         actions: <Widget>[
-          IconButton(icon: const Icon(Icons.share, color: AppColors.black), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.more_vert, color: AppColors.black), onPressed: () {}),
+          IconButton(
+              icon: const Icon(Icons.share, color: AppColors.black),
+              onPressed: () {}),
+          IconButton(
+              icon: const Icon(Icons.more_vert, color: AppColors.black),
+              onPressed: () {}),
         ],
       ),
       body: FutureBuilder<Article>(
@@ -155,7 +239,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           }
 
           final article = snapshot.data!;
-          
+
           return _buildDetailBody(context, article);
         },
       ),
@@ -194,27 +278,11 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8.0),
-                        child: Image.network(
+                        // 👇 PANGGIL FUNGSI IMAGE BARU DI SINI
+                        child: _buildArticleImage(
                           article.imagePath,
-                          fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return const Center(child: CircularProgressIndicator(strokeWidth: 1.5, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue)));
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              height: 200,
-                              color: AppColors.backgroundLight,
-                              child: const Center(
-                                child: Text(
-                                  'Cover Image Placeholder',
-                                  style: TextStyle(color: AppColors.darkGrey),
-                                ),
-                              ),
-                            );
-                          },
                         ),
                       ),
                     ),
@@ -260,7 +328,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 ),
                 const SizedBox(height: 15),
 
-                // --- GANTI JUDUL DENGAN "PREVIEW" ---
+                // --- JUDUL PREVIEW ---
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20.0),
                   child: Text(
@@ -272,14 +340,13 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   child: Text(
-                    _isAbstractExpanded 
-                        ? _getArticleContentPreview(article, wordLimit: 99999) 
+                    _isAbstractExpanded
+                        ? _getArticleContentPreview(article, wordLimit: 99999)
                         : _getArticleContentPreview(article, wordLimit: 70),
-                    
                     style: const TextStyle(
                       fontSize: 16,
                       height: 1.6,
@@ -288,22 +355,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                     textAlign: TextAlign.justify,
                   ),
                 ),
-                
-                // // Tombol "Read more" hanya muncul jika belum expanded DAN konten artikel > 50 kata
-                // if (!_isAbstractExpanded && fullContentWords > 50)
-                //   Padding(
-                //     padding: const EdgeInsets.only(left: 10.0, top: 5.0),
-                //     child: TextButton(
-                //       onPressed: _toggleAbstractExpansion,
-                //       child: const Text(
-                //         'Read more',
-                //         style: TextStyle(
-                //           color: AppColors.primaryBlue,
-                //           fontWeight: FontWeight.bold,
-                //         ),
-                //       ),
-                //     ),
-                //   ),
+
+                // (Kode 'Read more' yang di-comment telah dihilangkan)
               ],
             ),
           ),
@@ -384,7 +437,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      backgroundColor: _isArticleSaved ? AppColors.black.withOpacity(0.1) : AppColors.white,
+                      backgroundColor:
+                          _isArticleSaved ? AppColors.black.withOpacity(0.1) : AppColors.white,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
