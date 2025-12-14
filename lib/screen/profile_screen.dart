@@ -175,6 +175,206 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(appBar: AppBar(title: Text('PROFILEEEEE')));
+    final double topContainerHeight = MediaQuery.of(context).size.height * 0.25;
+
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      appBar: AppBar(
+        toolbarHeight: 0,
+        elevation: 0,
+        backgroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Container(
+              height: topContainerHeight,
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 5,
+                    offset: Offset(0, 1.5),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Column(
+                  children: [
+                    Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.grey.shade200,
+                          backgroundImage:
+                              _userPhotoUrl != null && _userPhotoUrl!.isNotEmpty
+                              ? NetworkImage(_userPhotoUrl!)
+                              : null,
+                          child: _userPhotoUrl == null || _userPhotoUrl!.isEmpty
+                              ? Icon(
+                                  Icons.person,
+                                  size: 50,
+                                  color: Colors.grey.shade600,
+                                )
+                              : null,
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: CircleAvatar(
+                            radius: 15,
+                            backgroundColor: AppColors.black,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(
+                                Icons.edit,
+                                size: 15,
+                                color: Colors.white,
+                              ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const DataDiriScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _userName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _userEmail,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Pengaturan Akun",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildSettingTile(
+                    title: "Data Diri",
+                    subtitle: "Ubah data diri di sini",
+                    icon: Icons.person,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DataDiriScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildSettingTile(
+                    title: "Keamanan dan Privasi",
+                    subtitle: "Pelajari keamanan dan privasi",
+                    icon: Icons.lock,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const KeamananPrivasiScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildSettingTile(
+                    title: "Tentang VokaPedia",
+                    subtitle: "Ketahui lebih dalam tentang VocaPedia",
+                    icon: Icons.info,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const TentangVocaPediaScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildSettingTile(
+                    title: "FAQ & Panduan",
+                    subtitle: "Lihat panduan untuk penggunaan optimal",
+                    icon: Icons.help,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const FAQScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildSettingTile(
+                    title: "Laporkan Masalah",
+                    subtitle: "Laporkan ketika menemukan masalah",
+                    icon: Icons.error,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LaporkanMasalahScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showLogoutConfirmation(context),
+                      icon: const Icon(
+                        Icons.logout,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      label: const Text(
+                        "Keluar",
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 50),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

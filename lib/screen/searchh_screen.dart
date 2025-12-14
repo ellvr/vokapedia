@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:vokapedia/services/firestore_services.dart';
+import 'package:vokapedia/services/firestore_services.dart'; 
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
 import '../utils/color_constants.dart';
@@ -23,8 +23,24 @@ class _SearchhScreenState extends State<SearchhScreen> {
     super.dispose();
   }
 
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 7) {
+      return "${date.day}/${date.month}/${date.year}";
+    } else if (difference.inDays > 0) {
+      return "${difference.inDays} hari lalu";
+    } else if (difference.inHours > 0) {
+      return "${difference.inHours} jam lalu";
+    } else if (difference.inMinutes > 0) {
+      return "${difference.inMinutes} menit lalu";
+    } else {
+      return "Baru saja";
+    }
+  }
+
   InlineSpan highlightText(String text, String query) {
-    // ... (kode highlightText tetap sama)
     final lower = text.toLowerCase();
     final q = query.toLowerCase();
 
@@ -78,9 +94,6 @@ class _SearchhScreenState extends State<SearchhScreen> {
     return TextSpan(children: spans);
   }
 
-  // ================================
-  // ✂️ FUNGSI UNTUK EXTRACT SNIPPET (WAJIB ADA)
-  // ================================
   String extractSnippet(String fullText, String query) {
     final lowerText = fullText.toLowerCase();
     final lowerQuery = query.toLowerCase();
@@ -104,7 +117,6 @@ class _SearchhScreenState extends State<SearchhScreen> {
     return fullText.substring(0, fullText.length > 200 ? 200 : fullText.length);
   }
 
-  // 🏷️ WIDGET TAG
   Widget _buildTag(String text) {
     return Container(
       margin: const EdgeInsets.only(right: 8),
@@ -125,37 +137,24 @@ class _SearchhScreenState extends State<SearchhScreen> {
     );
   }
 
-  // ================================
-  // 📦 WIDGET CARD LIST ARTIKEL (DIUBAH UNTUK HANDLE ERROR IMAGE)
-  // ================================
-  // ================================
-  // 📦 WIDGET CARD LIST ARTIKEL (DIUBAH UNTUK HANDLE BASE64/URL)
-  // ================================
   Widget _buildArticleListItem(
     Article item, {
     bool showSnippet = false,
     String query = '',
   }) {
-    // 1. Cek apakah ini Base64 String yang Valid (Biasanya Base64 sangat panjang)
-    bool isBase64Data =
-        item.imagePath.length > 100 && !item.imagePath.startsWith('http');
-
-    // 2. Cek apakah ini Network URL yang Valid
     bool isNetworkUrl =
-        item.imagePath.startsWith('http://') ||
-        item.imagePath.startsWith('https://');
+        item.imagePath.startsWith('http://') || item.imagePath.startsWith('https://');
+    bool isBase64Data = item.imagePath.length > 100 && !isNetworkUrl;
 
     Widget imageWidget;
 
     if (isNetworkUrl) {
-      // KASUS 1: Ini adalah Network URL
       imageWidget = Image.network(
         item.imagePath,
         width: 84,
         height: 108,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
-          // Fallback jika URL gagal dimuat
           return const Center(
             child: Icon(
               Icons.broken_image,
@@ -166,14 +165,11 @@ class _SearchhScreenState extends State<SearchhScreen> {
         },
       );
     } else if (isBase64Data) {
-      // KASUS 2: Ini adalah Base64 String. Lakukan konversi.
       try {
-        // Hilangkan 'data:image/png;base64,' jika ada. Asumsi Base64 murni.
         String base64String = item.imagePath.contains(',')
             ? item.imagePath.split(',').last
             : item.imagePath;
 
-        // Konversi string Base64 ke Uint8List
         Uint8List imageBytes = base64Decode(base64String);
 
         imageWidget = Image.memory(
@@ -183,14 +179,12 @@ class _SearchhScreenState extends State<SearchhScreen> {
           fit: BoxFit.cover,
         );
       } catch (e) {
-        // Fallback jika konversi Base64 gagal
         debugPrint('Base64 Decode Error: $e');
         imageWidget = const Center(
           child: Icon(Icons.error_outline, size: 40, color: AppColors.darkGrey),
         );
       }
     } else {
-      // KASUS 3: Path kosong atau tidak valid (tampilkan placeholder)
       imageWidget = const Center(
         child: Icon(
           Icons.image_not_supported,
@@ -198,6 +192,35 @@ class _SearchhScreenState extends State<SearchhScreen> {
           color: AppColors.darkGrey,
         ),
       );
+    }
+
+    String fullText = '';
+    if (showSnippet) {
+      final sectionsText = item.sections.map((s) {
+        final head = s["heading"] ?? "";
+        final paras = s["paragraphs"] is List
+            ? (s["paragraphs"] as List).join(" ")
+            : (s["paragraphs"] ?? "");
+        return "$head $paras";
+      }).join(" ");
+
+      fullText = "${item.title} ${item.author} ${item.abstractContent ?? ""} $sectionsText";
+    }
+
+    final DateTime articleDate = item.createdAt?.toDate() ?? DateTime.now(); 
+
+    final List<String> displayTags = [];
+    
+    if (item.kelas != null && item.kelas!.isNotEmpty) {
+      displayTags.add(item.kelas!.toUpperCase()); 
+    }
+
+    if (item.tags != null && item.tags!.isNotEmpty) {
+      final optionalTags = item.tags!
+          .split(RegExp(r'[,\s]+'))
+          .where((tag) => tag.isNotEmpty && tag.toUpperCase() != item.kelas?.toUpperCase())
+          .toList();
+      displayTags.addAll(optionalTags);
     }
 
     return GestureDetector(
@@ -221,66 +244,76 @@ class _SearchhScreenState extends State<SearchhScreen> {
                 width: 84,
                 height: 108,
                 color: AppColors.softBlue,
-                child:
-                    imageWidget, // <-- Menggunakan widget gambar yang sudah ditentukan
+                child: imageWidget, 
               ),
             ),
             const SizedBox(width: 12),
 
-            // ... (Sisa konten Artikel, sama seperti sebelumnya)
+            // Konten Artikel
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.title,
+                  // Judul (RichText untuk Highlighting)
+                  RichText( 
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    text: showSnippet 
+                        ? highlightText(item.title, query)
+                        : TextSpan(
+                            text: item.title,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.black,
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    item.author,
+
+                  RichText( 
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.darkGrey,
-                    ),
+                    text: showSnippet 
+                        ? highlightText(item.author, query)
+                        : TextSpan(
+                            text: item.author,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.darkGrey,
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 8),
 
-                  // Tampilkan Snippet atau Tags
                   if (showSnippet)
                     RichText(
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       text: highlightText(
                         extractSnippet(
-                          "${item.title} ${item.author} ${item.abstractContent ?? ""} ${item.sections.map((s) {
-                            final head = s["heading"] ?? "";
-                            final paras = s["paragraphs"] is List ? (s["paragraphs"] as List).join(" ") : (s["paragraphs"] ?? "");
-                            return "$head $paras";
-                          }).join(" ")}",
+                          fullText, 
                           query,
                         ),
                         query,
                       ),
                     )
                   else
-                    // Tampilkan Tags jika bukan hasil pencarian (Artikel Terbaru)
                     Wrap(
                       spacing: 8.0,
                       runSpacing: 4.0,
-                      children: [
-                        _buildTag('RPL'),
-                        _buildTag('XI'),
-                        _buildTag('PAPB'),
-                      ],
+                      children: displayTags.map((tag) => _buildTag(tag)).toList(),
                     ),
+
+                  const SizedBox(height: 16), 
+
+                  Text(
+                    "Diunggah: ${_formatDate(articleDate)}",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.darkGrey.withOpacity(0.7),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -295,9 +328,6 @@ class _SearchhScreenState extends State<SearchhScreen> {
     return SafeArea(
       child: Column(
         children: [
-          // ------------------------------
-          // SEARCH BAR + CLEAR BUTTON (TIDAK BERUBAH)
-          // ------------------------------
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -313,7 +343,6 @@ class _SearchhScreenState extends State<SearchhScreen> {
 
                 const SizedBox(width: 12),
 
-                // 🔍 SEARCH FIELD
                 Expanded(
                   child: TextField(
                     controller: _controller,
@@ -324,7 +353,6 @@ class _SearchhScreenState extends State<SearchhScreen> {
                       hintText: 'Search for title or author...',
                       prefixIcon: const Icon(Icons.search),
 
-                      // ❌ CLEAR BUTTON
                       suffixIcon: searchText.isNotEmpty
                           ? GestureDetector(
                               onTap: () {
@@ -354,15 +382,10 @@ class _SearchhScreenState extends State<SearchhScreen> {
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ================================
-                      // 🔵 TITLE: ARTIKEL TERBARU
-                      // ================================
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: 24,
-                          right: 24,
-                          top: 8,
-                          bottom: 8,
+                      const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 8,
                         ),
                         child: Text(
                           "Artikel Terbaru",
@@ -374,14 +397,9 @@ class _SearchhScreenState extends State<SearchhScreen> {
                         ),
                       ),
 
-                      // ================================
-                      // 🔄 STREAMBUILDER ARTIKEL TERBARU
-                      // ================================
-                      SizedBox(
-                        height: 140,
+                      Expanded(
                         child: StreamBuilder<List<Article>>(
-                          stream:
-                              getLatestArticles(), // ← pastikan sudah import
+                          stream: getLatestArticles(),
                           builder: (context, snapshot) {
                             if (!snapshot.hasData) {
                               return const Center(
@@ -394,83 +412,25 @@ class _SearchhScreenState extends State<SearchhScreen> {
                             final latest = snapshot.data!;
 
                             return ListView.builder(
-                              scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
+                                vertical: 8,
                               ),
                               itemCount: latest.length,
                               itemBuilder: (context, index) {
                                 final item = latest[index];
-
-                                return GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ArticleDetailScreen(
-                                          articleId: item.id,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    width: 160,
-                                    margin: const EdgeInsets.only(right: 12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.05),
-                                          blurRadius: 6,
-                                          offset: Offset(0, 3),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius:
-                                              const BorderRadius.vertical(
-                                                top: Radius.circular(12),
-                                              ),
-                                          child: Image.network(
-                                            item.imagePath,
-                                            height: 80,
-                                            width: 160,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(8),
-                                          child: Text(
-                                            item.title,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                return _buildArticleListItem(
+                                  item,
+                                  showSnippet: false,
                                 );
                               },
                             );
                           },
                         ),
                       ),
-
-                      const SizedBox(height: 12),
                     ],
                   )
-                // ================================
-                // 🔍 SEARCH RESULT
-                // ================================
+
                 : StreamBuilder<List<Article>>(
                     stream: searchArticles(searchText),
                     builder: (context, snapshot) {
@@ -484,87 +444,19 @@ class _SearchhScreenState extends State<SearchhScreen> {
 
                       final results = snapshot.data!;
                       if (results.isEmpty) {
-                        return const Center(child: Text("Tidak ada artikel yan ditemukan."));
+                        return const Center(
+                            child: Text("Tidak ada artikel yang ditemukan."));
                       }
 
                       return ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: results.length,
                         itemBuilder: (context, index) {
-                          // ... kode hasil search kamu (tetap sama)
                           final item = results[index];
-                          final fullText =
-                              "${item.title} ${item.author} ${item.abstractContent ?? ""} "
-                              "${item.sections.map((s) {
-                                final head = s["heading"] ?? "";
-                                final paras = s["paragraphs"] is List ? (s["paragraphs"] as List).join(" ") : (s["paragraphs"] ?? "");
-                                return "$head $paras";
-                              }).join(" ")}";
-
-                          final snippet = extractSnippet(fullText, searchText);
-
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ArticleDetailScreen(articleId: item.id),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 20),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.network(
-                                      item.imagePath,
-                                      width: 84,
-                                      height: 108,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.title,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          item.author,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.darkGrey,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        RichText(
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          text: highlightText(
-                                            snippet,
-                                            searchText,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          return _buildArticleListItem(
+                            item,
+                            showSnippet: true, 
+                            query: searchText, 
                           );
                         },
                       );

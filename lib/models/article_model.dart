@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Article {
@@ -12,6 +14,9 @@ class Article {
   final num? readingProgress;
   final Timestamp? createdAt;
   final Timestamp? updatedAt;
+  final String? tags;
+  final String? kelas;
+  
 
   Article({
     required this.id,
@@ -25,6 +30,8 @@ class Article {
     this.abstractContent,
     this.readingProgress,
     this.updatedAt,
+    this.tags,
+    this.kelas,
   });
 
   factory Article.fromFirestore(Map<String, dynamic> data, String documentId) {
@@ -37,6 +44,8 @@ class Article {
       author: data['author'] as String? ?? 'Unknown Author',
       imagePath: data['imagePath'] as String? ?? '',
       abstractContent: data['abstractContent'] as String?,
+      kelas: data['kelas'] as String?,
+      updatedAt: data['updatedAt'] as Timestamp?,
       isFeatured: data['isFeatured'] as bool? ?? false,
       isTopPick: data['isTopPick'] as bool? ?? false,
       sections: rawSections
