@@ -128,7 +128,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           crossAxisCount: 2,
                           crossAxisSpacing: 15.0,
                           mainAxisSpacing: 15.0,
-                          childAspectRatio: 0.6,
+                          childAspectRatio: 0.75,
                         ),
                     itemCount: libraryItems.length,
                     itemBuilder: (context, index) {
@@ -151,9 +151,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final bool isFinished = progress >= 1.0;
 
     return InkWell(
-      // Menggunakan InkWell agar ada efek visual saat dipencet
-      onTap: () =>
-          _navigateToReadingScreen(context, item), // Panggil fungsi navigasi
+      onTap: () => _navigateToReadingScreen(context, item),
       borderRadius: BorderRadius.circular(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

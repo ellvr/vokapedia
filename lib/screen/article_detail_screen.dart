@@ -162,7 +162,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         const SnackBar(
           content: Text('Berhasil ditambahkan ke Library!'),
           duration: Duration(seconds: 2),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.primaryBlue,
         ),
       );
     }

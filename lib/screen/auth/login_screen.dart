@@ -30,7 +30,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> loginUser() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Email dan password wajib diisi.")),
+        const SnackBar(
+          content: Text("Email dan password wajib diisi."),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -61,13 +64,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => HomeScreen(userRole: role), 
-        ),
+        MaterialPageRoute(builder: (_) => HomeScreen(userRole: role)),
       );
     } on FirebaseAuthException catch (e) {
       setState(() => _isLoading = false);
-      
+
       String errorMessageText;
       if (e.code == 'user-not-found' || e.code == 'wrong-password') {
         errorMessageText = "Email atau password salah.";
@@ -87,7 +88,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Terjadi kesalahan tak terduga.")),
+          const SnackBar(
+            content: Text("Terjadi kesalahan tak terduga."),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -105,9 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 40),
         const Text(
-            "Masuk",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-          ),
+          "Masuk",
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 6),
         Text(
           "Akses materi Bahasa Indonesia-mu 📚",
@@ -155,14 +159,14 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0, 
-        automaticallyImplyLeading: false, 
+        elevation: 0,
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           children: [
-            _buildAuthHeader(), 
+            _buildAuthHeader(),
 
             _buildInputFields(),
 

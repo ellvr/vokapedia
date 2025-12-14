@@ -1,3 +1,5 @@
+// ignore_for_file: empty_catches, deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -33,12 +35,15 @@ class _HomeScreenState extends State<HomeScreen> {
   String _userName = 'Pengguna';
   String? _userPhotoUrl;
 
+  List<Article> _featuredArticles = [];
+  bool _isFeaturedLoading = true;
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    _pageController.addListener(_onPageChanged);
     _loadUserName();
+    _loadFeaturedArticles();
   }
 
   Future<void> _loadUserName() async {
@@ -59,33 +64,34 @@ class _HomeScreenState extends State<HomeScreen> {
           if (snap.exists && (snap.data() as Map).containsKey('name')) {
             name = snap['name'];
           }
-        } catch (e) {}
+        } catch (_) {}
       }
 
       if (mounted) {
         setState(() {
           if (name != null && name.isNotEmpty) {
-            _userName = name!.split(' ')[0];
+            _userName = name.split(' ')[0];
           } else if (user.email != null) {
             _userName = user.email!.split('@')[0];
           } else {
             _userName = 'Pengguna';
           }
-
           _userPhotoUrl = photoUrl;
         });
       }
     }
   }
 
-  @override
-  void dispose() {
-    _pageController.removeListener(_onPageChanged);
-    _pageController.dispose();
-    super.dispose();
+  Future<void> _loadFeaturedArticles() async {
+    getArticlesByFeature(field: 'isFeatured', value: true).first.then((data) {
+      if (mounted) {
+        setState(() {
+          _featuredArticles = data;
+          _isFeaturedLoading = false;
+        });
+      }
+    });
   }
-
-  void _onPageChanged() {}
 
   final List<Widget> _screens = [
     const SizedBox(),
@@ -115,12 +121,12 @@ class _HomeScreenState extends State<HomeScreen> {
               stream: getArticlesByFeature(field: 'isTopPick', value: true),
               height: 200,
             ),
-            _buildSectionTitle(title: 'Continue reading'),
-            _buildArticlesList(
-              stream: getContinueReadingArticles(),
-              height: 220,
-              isReadingList: true,
-            ),
+            // _buildSectionTitle(title: 'Continue reading'),
+            // _buildArticlesList(
+            //   stream: getContinueReadingArticles(),
+            //   height: 220,
+            //   isReadingList: true,
+            // ),
             const SizedBox(height: 100),
           ],
         ),
@@ -147,6 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         }
+
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Padding(
             padding: EdgeInsets.symmetric(horizontal: _paddingHorizontal),
@@ -181,21 +188,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget? _buildFab() {
-    if (widget.userRole == 'admin') {
-      return FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AddArticleScreen()),
-          );
-        },
-        backgroundColor: AppColors.black,
-        child: const Icon(Icons.add, color: AppColors.white),
-      );
-    }
-    return null;
-  }
+  // Widget? _buildFab() {
+  //   if (widget.userRole == 'admin') {
+  //     return FloatingActionButton(
+  //       onPressed: () {
+  //         Navigator.push(
+  //           context,
+  //           MaterialPageRoute(builder: (_) => const AddArticleScreen()),
+  //         );
+  //       },
+  //       backgroundColor: AppColors.black,
+  //       child: const Icon(Icons.add, color: AppColors.white),
+  //     );
+  //   }
+  //   return null;
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -209,8 +216,8 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: _onItemTapped,
       ),
-      floatingActionButton: isHome ? _buildFab() : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      // floatingActionButton: isHome ? _buildFab() : null,
+      // floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -277,83 +284,66 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFeaturedContent() {
-    return StreamBuilder<List<Article>>(
-      stream: getArticlesByFeature(field: 'isFeatured', value: true),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 150,
-            child: Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
-              ),
-            ),
-          );
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const SizedBox.shrink();
-        }
+    if (_isFeaturedLoading) {
+      return const SizedBox(
+        height: 150,
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
+          ),
+        ),
+      );
+    }
 
-        final featuredContent = snapshot.data!;
+    if (_featuredArticles.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-        return Column(
-          children: <Widget>[
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 150,
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: featuredContent.length,
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentPage = index;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  final item = featuredContent[index];
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              ArticleDetailScreen(articleId: item.id),
-                        ),
-                      );
-                    },
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        item.imagePath,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: AppColors.softBlue,
-                            child: const Center(
-                              child: Text(
-                                'Gambar tidak ditemukan',
-                                style: TextStyle(color: AppColors.white),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+    return Column(
+      children: <Widget>[
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 150,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _featuredArticles.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final item = _featuredArticles[index];
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          ArticleDetailScreen(articleId: item.id),
                     ),
                   );
                 },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10.0),
-              child: _DotIndicator(
-                count: featuredContent.length,
-                currentIndex: _currentPage,
-              ),
-            ),
-          ],
-        );
-      },
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 20),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(item.imagePath, fit: BoxFit.cover),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10.0),
+          child: _DotIndicator(
+            count: _featuredArticles.length,
+            currentIndex: _currentPage,
+          ),
+        ),
+      ],
     );
   }
 
@@ -409,15 +399,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Text(
-                      'Gagal memuat gambar',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
-                    ),
-                  );
-                },
               ),
             ),
           ),

@@ -195,7 +195,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Anda telah selesai membaca artikel ini! Progress disimpan.',
+          'Selesai membaca artikel ini! Progress disimpan.',
         ),
         duration: Duration(seconds: 2),
       ),
@@ -745,10 +745,6 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                   : _colors.icon,
             ),
             onPressed: _toggleThemeSelector,
-          ),
-          IconButton(
-            icon: Icon(Icons.menu_book, color: _colors.icon),
-            onPressed: () {},
           ),
         ],
       ),

@@ -20,17 +20,14 @@ class FAQScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         children: const [
           _FAQItem(
-            question: 'Apa itu VocaPedia?',
+            question: 'Apa itu VokaPedia?',
             answer:
-                'VocaPedia adalah platform pembelajaran yang menyediakan materi '
-                'Bahasa Indonesia dalam bentuk arsip digital yang mudah diakses '
-                'kapan saja dan di mana saja.',
+                'VokaPedia adalah platform pembelajaran Bahasa Indonesia berbasis arsip digital yang membantu pengguna mengakses, membaca, dan menyimpan materi pembelajaran dengan lebih mudah dan terstruktur.',
           ),
           _FAQItem(
-            question: 'Bagaimana cara mengubah data diri?',
+            question: 'Bagaimana cara membaca dan menjelajahi materi?',
             answer:
-                'Anda dapat mengubah data diri melalui menu Profil lalu memilih '
-                'Data Diri. Setelah melakukan perubahan, tekan tombol Simpan.',
+                'Kamu bisa menjelajahi materi melalui halaman Beranda atau Library. Pilih artikel yang ingin dibaca, lalu scroll untuk menikmati isi materi secara lengkap sekaligus penanda terakhir dibaca.',
           ),
           _FAQItem(
             question: 'Apakah data saya aman?',
@@ -39,16 +36,19 @@ class FAQScreen extends StatelessWidget {
                 'untuk keperluan aplikasi sesuai dengan kebijakan privasi.',
           ),
           _FAQItem(
-            question: 'Bagaimana jika lupa akun?',
+            question: 'Apa fungsi bookmark pada artikel?',
             answer:
-                'Silakan lakukan login ulang menggunakan email yang terdaftar '
-                'atau hubungi admin melalui menu Laporkan Masalah.',
+                'Fitur bookmark memungkinkan kamu menandai kalimat atau bagian penting dalam artikel agar lebih mudah diingat dan dipelajari kembali.',
           ),
           _FAQItem(
-            question: 'Bagaimana cara melaporkan bug?',
+            question: 'Apakah progres membaca saya akan tersimpan?',
             answer:
-                'Anda dapat melaporkan bug atau kendala melalui halaman '
-                'Laporkan Masalah yang tersedia di menu Profil.',
+                'Ya. VokaPedia secara otomatis menyimpan progres membaca, sehingga kamu bisa melanjutkan membaca artikel dari bagian terakhir yang kamu baca.',
+          ),
+          _FAQItem(
+            question: 'Apakah saya bisa mengubah data profil saya?',
+            answer:
+                'Tentu. Kamu dapat mengubah data diri seperti nama dan informasi lainnya melalui menu Profil → Data Diri. Perubahan akan tersimpan secara otomatis di akunmu.',
           ),
         ],
       ),
@@ -78,12 +78,14 @@ class _FAQItem extends StatelessWidget {
         title: Text(
           question,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          textAlign: TextAlign.justify,
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
           Text(
             answer,
             style: const TextStyle(fontSize: 14, color: Colors.black87),
+            textAlign: TextAlign.justify,
           ),
         ],
       ),
