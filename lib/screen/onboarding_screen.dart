@@ -92,13 +92,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               itemBuilder: (_, i) {
                 return SingleChildScrollView(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Image
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 0),
-                        child: SvgPicture.asset(
-                          onboardingData[i]["image"]!,
-                          fit: BoxFit.contain,
+                        child: Center(
+                          child: SvgPicture.asset(
+                            onboardingData[i]["image"]!,
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 60),
@@ -124,7 +127,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
                           onboardingData[i]["desc"]!,
-                          textAlign: TextAlign.left,
+                          textAlign: TextAlign.justify,
                           style: TextStyle(
                             fontSize: 15,
                             color: AppColors.darkGrey,

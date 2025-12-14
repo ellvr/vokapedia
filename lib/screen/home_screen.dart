@@ -1,13 +1,16 @@
-// ignore_for_file: deprecated_member_use
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
 import 'package:vokapedia/screen/bookmark_screen.dart';
 import 'package:vokapedia/screen/library_screen.dart';
+import 'package:vokapedia/screen/profile_screen.dart';
 import 'package:vokapedia/screen/searchh_screen.dart';
 import 'package:vokapedia/services/firestore_services.dart';
+import 'package:vokapedia/screen/add_article_screen.dart';
 import '../widget/custom_bottom_navbar.dart';
 import '../utils/color_constants.dart';
 
@@ -16,8 +19,9 @@ const double _spacingVertical = 15.0;
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
+  final String userRole;
 
-  const HomeScreen({super.key, this.initialIndex = 0});
+  const HomeScreen({super.key, this.initialIndex = 0, required this.userRole});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -28,28 +32,79 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentPage = 0;
   final PageController _pageController = PageController(viewportFraction: 0.9);
 
+  String _userName = 'Pengguna';
+  String? _userPhotoUrl;
+
+  List<Article> _featuredArticles = [];
+  bool _isFeaturedLoading = true;
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    _pageController.addListener(_onPageChanged);
+    _loadUserName();
+    _loadFeaturedArticles();
   }
 
   @override
   void dispose() {
-    _pageController.removeListener(_onPageChanged);
     _pageController.dispose();
     super.dispose();
   }
 
-  void _onPageChanged() {}
+  Future<void> _loadUserName() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String? name;
+      String? photoUrl;
+
+      name = user.displayName;
+      photoUrl = user.photoURL;
+
+      if (name == null || name.isEmpty) {
+        try {
+          DocumentSnapshot snap = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+          if (snap.exists && (snap.data() as Map).containsKey('name')) {
+            name = snap['name'];
+          }
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          if (name != null && name.isNotEmpty) {
+            _userName = name.split(' ')[0];
+          } else if (user.email != null) {
+            _userName = user.email!.split('@')[0];
+          } else {
+            _userName = 'Pengguna';
+          }
+          _userPhotoUrl = photoUrl;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadFeaturedArticles() async {
+    getArticlesByFeature(field: 'isFeatured', value: true).first.then((data) {
+      if (mounted) {
+        setState(() {
+          _featuredArticles = data;
+          _isFeaturedLoading = false;
+        });
+      }
+    });
+  }
 
   final List<Widget> _screens = [
     const SizedBox(),
     const SearchhScreen(),
     const LibraryScreen(),
     const BookmarkScreen(),
-    const Center(child: Text('Halaman Profile')),
+    const ProfileScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -58,9 +113,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ================================
-  // ⚙️ FUNGSI UNTUK MENANGANI LOGIKA GAMBAR (BARU)
-  // ================================
   Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
     bool isNetworkUrl =
         imagePath.startsWith('http://') || imagePath.startsWith('https://');
@@ -98,7 +150,6 @@ class _HomeScreenState extends State<HomeScreen> {
           fit: BoxFit.cover,
         );
       } catch (e) {
-        // Fallback jika konversi Base64 gagal
         debugPrint('Base64 Decode Error in Home: $e');
         imageWidget = Container(
           color: AppColors.backgroundLight,
@@ -108,7 +159,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } else {
-      // Path kosong atau tidak valid
       imageWidget = Container(
         color: AppColors.backgroundLight,
         child: const Center(
@@ -122,28 +172,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHomeBody(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const SizedBox(height: 10),
-              _buildFeaturedContent(),
-              _buildSectionTitle(title: 'Top picks for you'),
-              _buildArticlesList(
-                stream: getArticlesByFeature(field: 'isTopPick', value: true),
-                height: 200,
-              ),
-              _buildSectionTitle(title: 'Continue reading'),
-              _buildArticlesList(
-                stream:
-                    getContinueReadingArticles(), 
-                height: 220,
-                isReadingList: true,
-              ),
-              const SizedBox(height: 50),
-            ],
-          ),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const SizedBox(height: 10),
+            _buildFeaturedContent(),
+            _buildSectionTitle(title: 'Top picks for you'),
+            _buildArticlesList(
+              stream: getArticlesByFeature(field: 'isTopPick', value: true),
+              height: 200,
+            ),
+            _buildSectionTitle(title: 'Continue reading'), 
+            _buildArticlesList(
+              stream: getContinueReadingArticles(),
+              height: 220,
+              isReadingList: true,
+            ),
+            const SizedBox(height: 100), 
+          ],
         ),
       ),
     );
@@ -163,13 +210,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  AppColors.black,
-                ),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
               ),
             ),
           );
         }
+
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Padding(
             padding: EdgeInsets.symmetric(horizontal: _paddingHorizontal),
@@ -235,17 +281,17 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.only(left: _paddingHorizontal),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const <Widget>[
+                children: <Widget>[
                   Text(
-                    'Halo Firza!',
-                    style: TextStyle(
+                    'Halo $_userName!',
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: AppColors.black,
                     ),
                   ),
-                  SizedBox(height: 4),
-                  Text(
+                  const SizedBox(height: 4),
+                  const Text(
                     'Siap eksplor bacaan baru untuk belajar?',
                     style: TextStyle(fontSize: 14, color: AppColors.darkGrey),
                   ),
@@ -255,9 +301,23 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Padding(
             padding: const EdgeInsets.only(right: _paddingHorizontal),
-            child: const CircleAvatar(
-              radius: 24,
-              backgroundImage: AssetImage('assets/img/pp.jpg'),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () {
+                setState(() {
+                  _currentIndex = 4;
+                });
+              },
+              child: CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.backgroundLight,
+                backgroundImage: _userPhotoUrl != null && _userPhotoUrl!.isNotEmpty
+                    ? NetworkImage(_userPhotoUrl!)
+                    : null,
+                child: _userPhotoUrl == null || _userPhotoUrl!.isEmpty
+                    ? const Icon(Icons.person, color: AppColors.darkGrey)
+                    : null,
+              ),
             ),
           ),
         ],
@@ -267,76 +327,71 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFeaturedContent() {
-    return StreamBuilder<List<Article>>(
-      stream: getArticlesByFeature(field: 'isFeatured', value: true),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 150,
-            child: Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  AppColors.black,
-                ),
-              ),
-            ),
-          );
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const SizedBox.shrink();
-        }
+    if (_isFeaturedLoading) {
+      return const SizedBox(
+        height: 150,
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
+          ),
+        ),
+      );
+    }
 
-        final featuredContent = snapshot.data!;
+    if (_featuredArticles.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final featuredContent = _featuredArticles;
 
-        return Column(
-          children: <Widget>[
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 150,
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: featuredContent.length,
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentPage = index;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  final item = featuredContent[index];
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              ArticleDetailScreen(articleId: item.id),
-                        ),
-                      );
-                    },
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      // 👇 PANGGIL FUNGSI IMAGE BARU
-                      child: _buildArticleImage(
-                        item.imagePath,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
+    return Column(
+      children: <Widget>[
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 150,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: featuredContent.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final item = featuredContent[index];
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          ArticleDetailScreen(articleId: item.id),
                     ),
                   );
                 },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10.0),
-              child: _DotIndicator(
-                count: featuredContent.length,
-                currentIndex: _currentPage,
-              ),
-            ),
-          ],
-        );
-      },
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 20),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _buildArticleImage(
+                      item.imagePath,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10.0),
+          child: _DotIndicator(
+            count: featuredContent.length,
+            currentIndex: _currentPage,
+          ),
+        ),
+      ],
     );
   }
 
@@ -387,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              // 👇 PANGGIL FUNGSI IMAGE BARU
+              
               child: _buildArticleImage(
                 item.imagePath,
                 width: double.infinity,

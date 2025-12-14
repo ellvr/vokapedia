@@ -1,7 +1,15 @@
+// ignore_for_file: empty_catches, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:vokapedia/screen/auth/login_screen.dart';
+import 'package:vokapedia/screen/data_diri_screen.dart';
+import 'package:vokapedia/screen/faq_screen.dart';
+import 'package:vokapedia/screen/keamanan_privasi_screen.dart';
+import 'package:vokapedia/screen/laporkan_masalah_screen.dart';
+import 'package:vokapedia/screen/tentang_vocapedia_screen.dart';
+import 'package:vokapedia/utils/color_constants.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -11,165 +19,162 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final user = FirebaseAuth.instance.currentUser;
-
-  Future<DocumentSnapshot<Map<String, dynamic>>> getUserData() {
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(user!.uid)
-        .get();
-  }
+  String _userName = 'Nama Pengguna';
+  String _userEmail = 'email tidak tersedia';
+  String? _userPhotoUrl;
+  final User? user = FirebaseAuth.instance.currentUser;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: FutureBuilder(
-          future: getUserData(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+  void initState() {
+    super.initState();
+    _loadUserProfileData();
+  }
 
-            if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text("Data user tidak ditemukan"));
-            }
+  Future<void> _loadUserProfileData() async {
+    if (user == null) return;
 
-            final data = snapshot.data!.data()!;
+    String? name;
+    String? photoUrl = user!.photoURL;
+    String email = user!.email ?? 'email tidak tersedia';
 
-            return Column(
-              children: [
-                const SizedBox(height: 24),
+    name = user!.displayName;
 
-                /// ===== PROFILE HEADER =====
-                CircleAvatar(
-                  radius: 50,
-                  backgroundImage: data['photoUrl'] != null &&
-                          data['photoUrl'] != ''
-                      ? NetworkImage(data['photoUrl'])
-                      : const AssetImage('assets/img/pp.jpg')
-                          as ImageProvider,
-                ),
+    if (name == null || name.isEmpty) {
+      try {
+        DocumentSnapshot snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .get();
+        if (snap.exists && (snap.data() as Map).containsKey('name')) {
+          name = snap['name'];
+        }
+      } catch (e) {}
+    }
 
-                const SizedBox(height: 12),
+    if (mounted) {
+      setState(() {
+        _userPhotoUrl = photoUrl;
+        _userEmail = email;
+        _userName =
+            name ??
+            (user!.email != null
+                ? user!.email!.split('@')[0]
+                : 'Nama Pengguna');
+      });
+    }
+  }
 
-                Text(
-                  data['name'] ?? '-',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+  Future<void> _logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
 
-                const SizedBox(height: 4),
-
-                Text(
-                  data['email'] ?? '-',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                /// ===== MENU LIST =====
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    children: [
-                      _profileItem(
-                        icon: Icons.person,
-                        title: "Data Diri",
-                        subtitle: "Ubah data diri disini",
-                        onTap: () {},
-                      ),
-                      _profileItem(
-                        icon: Icons.lock,
-                        title: "Keamanan dan Privasi",
-                        subtitle: "Atur keamanan dan privasi",
-                        onTap: () {},
-                      ),
-                      _profileItem(
-                        icon: Icons.info,
-                        title: "Tentang VokaPedia",
-                        subtitle: "Ketahui lebih dalam tentang VokaPedia",
-                        onTap: () {},
-                      ),
-                      _profileItem(
-                        icon: Icons.help_outline,
-                        title: "FAQ & Panduan",
-                        subtitle: "Lihat panduan penggunaan optimal",
-                        onTap: () {},
-                      ),
-                      _profileItem(
-                        icon: Icons.report_problem_outlined,
-                        title: "Laporkan Masalah",
-                        subtitle: "Laporkan ketika menemukan masalah",
-                        onTap: () {},
-                      ),
-                    ],
-                  ),
-                ),
-
-                /// ===== LOGOUT =====
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        await FirebaseAuth.instance.signOut();
-                        Navigator.pushNamedAndRemoveUntil(
-                            context, '/login', (route) => false);
-                      },
-                      icon: const Icon(Icons.logout),
-                      label: const Text("Keluar"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(50),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+  Future<void> _showLogoutConfirmation(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: const Text(
+            'Keluar',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+          ),
+          content: const Text(
+            'Apakah kamu yakin ingin keluar dari akun ini?',
+            style: TextStyle(fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _logout(context);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+              child: const Text('Yakin', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  /// ===== REUSABLE MENU ITEM =====
-  Widget _profileItem({
-    required IconData icon,
+  Widget _buildSettingTile({
     required String title,
     required String subtitle,
-    required VoidCallback onTap,
+    required IconData icon,
+    VoidCallback? onTap,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300, width: 1.0),
       ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.white,
-          child: Icon(icon, color: Colors.black),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: 12.0,
+              horizontal: 8.0,
+            ),
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 12.0, left: 4.0),
+                  child: Icon(icon, color: AppColors.black),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.black54),
+              ],
+            ),
+          ),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(appBar: AppBar(title: Text('PROFILEEEEE')));
   }
 }

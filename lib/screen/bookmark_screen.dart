@@ -1,33 +1,43 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:vokapedia/screen/article_reading_screen.dart';
 import 'package:vokapedia/utils/color_constants.dart';
-import 'package:vokapedia/models/bookmark_model.dart'; 
-import 'package:intl/intl.dart'; 
+import 'package:vokapedia/models/bookmark_model.dart';
+import 'package:intl/intl.dart';
 
 class BookmarkScreen extends StatelessWidget {
   const BookmarkScreen({super.key});
 
   Stream<List<BookmarkItem>> _getBookmarksStream() {
-    const String userId = 'user123'; 
-    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream.value([]);
+    }
+
     return FirebaseFirestore.instance
-        .collection('user_bookmarks')
-        .where('userId', isEqualTo: userId)
+        .collection('users')
+        .doc(user.uid)
+        .collection('bookmarks')
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => BookmarkItem.fromFirestore(doc.data(), doc.id))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => BookmarkItem.fromFirestore(doc.data(), doc.id))
+              .toList();
+        });
   }
 
   void _removeBookmark(BuildContext context, String bookmarkId) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     FirebaseFirestore.instance
-        .collection('user_bookmarks')
+        .collection('users')
+        .doc(user.uid)
+        .collection('bookmarks')
         .doc(bookmarkId)
         .delete();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -39,18 +49,56 @@ class BookmarkScreen extends StatelessWidget {
     );
   }
 
-  void _navigateToArticle(BuildContext context, BookmarkItem item) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ArticleReadingScreen(
-          articleId: item.articleId, 
-          articleTitle: item.articleTitle,
-          articleAuthor: item.author,
-          imagePath: '', 
+  void _navigateToArticle(BuildContext context, BookmarkItem item) async {
+    try {
+      final articleDoc = await FirebaseFirestore.instance
+          .collection('articles')
+          .doc(item.articleId)
+          .get();
+
+      if (!articleDoc.exists) {
+        throw Exception("Article not found in articles collection.");
+      }
+
+      final articleData = articleDoc.data()!;
+      final String correctImagePath = articleData['imagePath'] ?? '';
+
+      final user = FirebaseAuth.instance.currentUser;
+      double initialProgress = 0.0;
+      if (user != null) {
+        final historyDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('readingHistory')
+            .doc(item.articleId)
+            .get();
+        if (historyDoc.exists) {
+          initialProgress =
+              historyDoc.data()?['readingProgress']?.toDouble() ?? 0.0;
+        }
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ArticleReadingScreen(
+            articleId: item.articleId,
+            articleTitle: item.articleTitle,
+            articleAuthor: item.author,
+            imagePath: correctImagePath,
+            initialProgress: initialProgress,
+            highlightedTextToFind: item.highlightedText,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memuat artikel: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -92,30 +140,33 @@ class BookmarkScreen extends StatelessWidget {
           }
 
           return ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-              itemCount: bookmarkItems.length,
-              itemBuilder: (context, index) {
-                final item = bookmarkItems[index];
-                return _buildBookmarkCard(context, item);
-              },
-            );
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 10.0,
+            ),
+            itemCount: bookmarkItems.length,
+            itemBuilder: (context, index) {
+              final item = bookmarkItems[index];
+              return _buildBookmarkCard(context, item);
+            },
+          );
         },
       ),
     );
   }
 
   Widget _buildBookmarkCard(BuildContext context, BookmarkItem item) {
-    final formattedDate = DateFormat('dd MMM yyyy, HH:mm').format(item.dateSaved);
+    final formattedDate = DateFormat(
+      'dd MMM yyyy, HH:mm',
+    ).format(item.dateSaved);
 
     return InkWell(
-      onTap: () => _navigateToArticle(context, item), 
+      onTap: () => _navigateToArticle(context, item),
       child: Card(
         color: AppColors.backgroundLight,
         margin: const EdgeInsets.only(bottom: 12.0),
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -131,7 +182,6 @@ class BookmarkScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -160,7 +210,11 @@ class BookmarkScreen extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                      size: 20,
+                    ),
                     onPressed: () => _removeBookmark(context, item.id),
                   ),
                 ],

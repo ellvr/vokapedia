@@ -2,17 +2,32 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/utils/color_constants.dart';
 import 'dart:convert'; // Wajib untuk Base64
 import 'dart:typed_data'; // Wajib untuk Uint8List
+import 'package:vokapedia/screen/article_reading_screen.dart'; // Import yang dibutuhkan
 
-class LibraryScreen extends StatelessWidget {
+class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
 
+  @override
+  State<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends State<LibraryScreen> {
+  final User? _currentUser = FirebaseAuth.instance.currentUser;
+
   Stream<List<Article>> _getLibraryItems() {
+    if (_currentUser == null) {
+      return Stream.value([]);
+    }
+
     return FirebaseFirestore.instance
-        .collection('saved_articles')
+        .collection('users')
+        .doc(_currentUser.uid)
+        .collection('readingHistory')
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -22,10 +37,15 @@ class LibraryScreen extends StatelessWidget {
   }
 
   void _removeItem(BuildContext context, String articleId) {
+    if (_currentUser == null) return;
+
     FirebaseFirestore.instance
-        .collection('saved_articles')
+        .collection('users')
+        .doc(_currentUser.uid)
+        .collection('readingHistory')
         .doc(articleId)
         .delete();
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Item dihapus dari Library.'),
@@ -108,8 +128,28 @@ class LibraryScreen extends StatelessWidget {
   }
   // =========================================================
 
+  void _navigateToReadingScreen(BuildContext context, Article item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ArticleReadingScreen(
+          articleId: item.id,
+          articleTitle: item.title,
+          articleAuthor: item.author,
+          imagePath: item.imagePath,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_currentUser == null) {
+      return const Center(
+        child: Text('Anda harus login untuk melihat Library.'),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
@@ -163,7 +203,7 @@ class LibraryScreen extends StatelessWidget {
                           crossAxisCount: 2,
                           crossAxisSpacing: 15.0,
                           mainAxisSpacing: 15.0,
-                          childAspectRatio: 0.6,
+                          childAspectRatio: 0.75,
                         ),
                     itemCount: libraryItems.length,
                     itemBuilder: (context, index) {
@@ -182,6 +222,7 @@ class LibraryScreen extends StatelessWidget {
 
   Widget _buildGridCard(BuildContext context, Article item) {
     final double progress = item.readingProgress?.toDouble() ?? 0.0;
+
 
     final bool isFinished = progress >= 1.0;
 
@@ -274,6 +315,59 @@ class LibraryScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withOpacity(0.9),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(10),
+                      bottomRight: Radius.circular(10),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SizedBox(
+                            height: 8,
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: AppColors.darkGrey.withOpacity(
+                                0.3,
+                              ),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isFinished
+                                    ? AppColors.primaryBlue
+                                    : AppColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      isFinished
+                          ? const Icon(
+                              Icons.check_circle,
+                              size: 20,
+                              color: AppColors.primaryBlue,
+                            )
+                          : const Icon(
+                              Icons.menu_book,
+                              size: 20,
+                              color: AppColors.black,
+                            ),
+                    ],
+                  ),
+                ),
+              ),
 
               Positioned(
                 top: 8,
@@ -308,3 +402,4 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 }
+

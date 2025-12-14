@@ -17,9 +17,12 @@ class _SearchhScreenState extends State<SearchhScreen> {
   String searchText = "";
   final TextEditingController _controller = TextEditingController();
 
-  // ================================
-  // 🔍 HIGHLIGHT FUNCTION (TIDAK BERUBAH)
-  // ================================
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   InlineSpan highlightText(String text, String query) {
     // ... (kode highlightText tetap sama)
     final lower = text.toLowerCase();
@@ -251,7 +254,7 @@ class _SearchhScreenState extends State<SearchhScreen> {
                   const SizedBox(height: 8),
 
                   // Tampilkan Snippet atau Tags
-                  if (showSnippet) 
+                  if (showSnippet)
                     RichText(
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -270,8 +273,8 @@ class _SearchhScreenState extends State<SearchhScreen> {
                   else
                     // Tampilkan Tags jika bukan hasil pencarian (Artikel Terbaru)
                     Wrap(
-                      spacing: 8.0, 
-                      runSpacing: 4.0, 
+                      spacing: 8.0,
+                      runSpacing: 4.0,
                       children: [
                         _buildTag('RPL'),
                         _buildTag('XI'),
@@ -346,9 +349,6 @@ class _SearchhScreenState extends State<SearchhScreen> {
             ),
           ),
 
-          // ------------------------------
-          // CONTENT AREA
-          // ------------------------------
           Expanded(
             child: searchText.isEmpty
                 ? Column(
@@ -357,10 +357,12 @@ class _SearchhScreenState extends State<SearchhScreen> {
                       // ================================
                       // 🔵 TITLE: ARTIKEL TERBARU
                       // ================================
-                      const Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 8,
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: 24,
+                          right: 24,
+                          top: 8,
+                          bottom: 8,
                         ),
                         child: Text(
                           "Artikel Terbaru",
@@ -373,11 +375,13 @@ class _SearchhScreenState extends State<SearchhScreen> {
                       ),
 
                       // ================================
-                      // 🔄 STREAMBUILDER ARTIKEL TERBARU (LIST VERTICAL)
+                      // 🔄 STREAMBUILDER ARTIKEL TERBARU
                       // ================================
-                      Expanded(
+                      SizedBox(
+                        height: 140,
                         child: StreamBuilder<List<Article>>(
-                          stream: getLatestArticles(),
+                          stream:
+                              getLatestArticles(), // ← pastikan sudah import
                           builder: (context, snapshot) {
                             if (!snapshot.hasData) {
                               return const Center(
@@ -390,23 +394,78 @@ class _SearchhScreenState extends State<SearchhScreen> {
                             final latest = snapshot.data!;
 
                             return ListView.builder(
+                              scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
-                                vertical: 8,
                               ),
                               itemCount: latest.length,
                               itemBuilder: (context, index) {
                                 final item = latest[index];
-                                // Panggil tanpa snippet (showSnippet: false)
-                                return _buildArticleListItem(
-                                  item,
-                                  showSnippet: false,
+
+                                return GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ArticleDetailScreen(
+                                          articleId: item.id,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    width: 160,
+                                    margin: const EdgeInsets.only(right: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.05),
+                                          blurRadius: 6,
+                                          offset: Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                                top: Radius.circular(12),
+                                              ),
+                                          child: Image.network(
+                                            item.imagePath,
+                                            height: 80,
+                                            width: 160,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.all(8),
+                                          child: Text(
+                                            item.title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 );
                               },
                             );
                           },
                         ),
                       ),
+
+                      const SizedBox(height: 12),
                     ],
                   )
                 // ================================
@@ -425,19 +484,87 @@ class _SearchhScreenState extends State<SearchhScreen> {
 
                       final results = snapshot.data!;
                       if (results.isEmpty) {
-                        return const Center(child: Text("No articles found."));
+                        return const Center(child: Text("Tidak ada artikel yan ditemukan."));
                       }
 
                       return ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: results.length,
                         itemBuilder: (context, index) {
+                          // ... kode hasil search kamu (tetap sama)
                           final item = results[index];
-                          // Panggil dengan snippet (showSnippet: true)
-                          return _buildArticleListItem(
-                            item,
-                            showSnippet: true,
-                            query: searchText,
+                          final fullText =
+                              "${item.title} ${item.author} ${item.abstractContent ?? ""} "
+                              "${item.sections.map((s) {
+                                final head = s["heading"] ?? "";
+                                final paras = s["paragraphs"] is List ? (s["paragraphs"] as List).join(" ") : (s["paragraphs"] ?? "");
+                                return "$head $paras";
+                              }).join(" ")}";
+
+                          final snippet = extractSnippet(fullText, searchText);
+
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ArticleDetailScreen(articleId: item.id),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 20),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      item.imagePath,
+                                      width: 84,
+                                      height: 108,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item.author,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.darkGrey,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        RichText(
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          text: highlightText(
+                                            snippet,
+                                            searchText,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           );
                         },
                       );
