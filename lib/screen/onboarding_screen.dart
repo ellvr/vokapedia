@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'auth/login_screen.dart'; // nanti halaman untuk pilih Guru / Siswa
+import 'auth/login_screen.dart';
 import '../utils/color_constants.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -13,23 +14,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _controller = PageController();
   int currentPage = 0;
 
-  // Data onboarding
   final List<Map<String, String>> onboardingData = [
     {
-      "image": "assets/img/onboard1.png",
-      "title": "Halo, Selamat Datang di VokaPedia 📚✨",
+      "image": "assets/img/onboard1.svg",
+      "title": "Halo, Selamat Datang di VokaPedia",
       "desc":
           "Platform pembelajaran yang menyediakan materi Bahasa Indonesia dalam arsip digital yang lebih mudah diakses.",
     },
     {
-      "image": "assets/img/onboard2.png",
-      "title": "Highlight Bagian Penting, Simpan untuk Nanti🔍✨",
+      "image": "assets/img/onboard2.svg",
+      "title": "Highlight Bagian Penting, Simpan untuk Nanti",
       "desc":
           "Sorot kalimat yang menurutmu penting, lalu simpan ke bookmark agar kamu bisa kembali ke bagian tersebut tanpa perlu mencari ulang.",
     },
     {
-      "image": "assets/img/onboard3.png",
-      "title": "Yuk Bangun Ruang Belajarmu Sendiri! 🎉📚",
+      "image": "assets/img/onboard3.svg",
+      "title": "Yuk Bangun Ruang Belajarmu Sendiri!",
       "desc":
           "Simpan materi favoritmu dan buka kembali kapan saja. Yuk mulai perjalanan belajar sesuai dengan ritmemu.",
     },
@@ -43,7 +43,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      // Last page → masuk ke login choice (Guru/Siswa)
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -70,7 +69,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           const SizedBox(height: 80),
 
-          // App Name
           const Center(
             child: Text(
               "VokaPedia",
@@ -84,7 +82,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
           const SizedBox(height: 40),
 
-          // PageView
           Expanded(
             child: PageView.builder(
               controller: _controller,
@@ -95,16 +92,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               itemBuilder: (_, i) {
                 return SingleChildScrollView(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Image
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 0),
-                        child: Image.asset(
-                          onboardingData[i]["image"]!,
-                          fit: BoxFit.cover,
+                        child: Center(
+                          child: SvgPicture.asset(
+                            onboardingData[i]["image"]!,
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 60),
 
                       // TITLE
                       Padding(
@@ -127,10 +127,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
                           onboardingData[i]["desc"]!,
-                          textAlign: TextAlign.left,
+                          textAlign: TextAlign.justify,
                           style: TextStyle(
                             fontSize: 15,
-                            color: AppColors.primaryBlue,
+                            color: AppColors.darkGrey,
                             height: 1.5,
                           ),
                         ),
@@ -142,14 +142,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
 
-          const SizedBox(height: 60),
+          const SizedBox(height: 10),
 
-          // Bottom navigation
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 48),
             child: Row(
               children: [
-                // LEFT BUTTON
                 GestureDetector(
                   onTap: prevPage,
                   child: Container(
@@ -164,7 +162,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                 const SizedBox(width: 16),
 
-                // DOT INDICATOR
                 Row(
                   children: List.generate(
                     onboardingData.length,
@@ -184,8 +181,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
 
                 const SizedBox(width: 16),
-
-                // RIGHT BUTTON
                 GestureDetector(
                   onTap: nextPage,
                   child: Container(
@@ -202,10 +197,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
 
-                // ---- SPACER UNTUK DORONG LEWATI KE KANAN ----
                 const Spacer(),
-
-                // LEWATI
                 GestureDetector(
                   onTap: () {
                     Navigator.pushReplacement(
@@ -215,36 +207,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   },
                   child: Text(
                     "Lewati",
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    style: TextStyle(fontSize: 14, color: AppColors.darkGrey),
                   ),
                 ),
               ],
             ),
           ),
-
-          // Lewati button
-          // Align(
-          //   alignment: Alignment.centerRight,
-          //   child: Padding(
-          //     padding: const EdgeInsets.only(right: 24, top: 10, bottom: 40),
-          //     child: GestureDetector(
-          //       onTap: () {
-          //         Navigator.pushReplacement(
-          //           context,
-          //           MaterialPageRoute(
-          //               builder: (_) => const LoginScreen()),
-          //         );
-          //       },
-          //       child: Text(
-          //         "Lewati",
-          //         style: TextStyle(
-          //           fontSize: 14,
-          //           color: Colors.grey.shade600,
-          //         ),
-          //       ),
-          //     ),
-          //   ),
-          // ),
         ],
       ),
     );

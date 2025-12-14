@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Article {
   final String id;
   final String title;
@@ -8,6 +10,7 @@ class Article {
   final bool isFeatured;
   final bool isTopPick;
   final num? readingProgress;
+  final Timestamp? createdAt;
 
   Article({
     required this.id,
@@ -17,6 +20,7 @@ class Article {
     required this.sections,
     required this.isFeatured,
     required this.isTopPick,
+    required this.createdAt,
     this.abstractContent,
     this.readingProgress,
   });
@@ -26,6 +30,7 @@ class Article {
 
     return Article(
       id: documentId,
+      createdAt: data['createdAt'] as Timestamp?,
       title: data['title'] as String? ?? 'Untitled',
       author: data['author'] as String? ?? 'Unknown Author',
       imagePath: data['imagePath'] as String? ?? '',

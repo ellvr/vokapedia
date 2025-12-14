@@ -7,7 +7,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await Firebase.initializeApp();
 
   runApp(const MyApp());
 }
@@ -19,8 +18,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      // home: HomeScreen(),
-      home: SplashScreen(),
+      home: const SplashScreen(),
       theme: ThemeData(fontFamily: 'PlayfairDisplay', useMaterial3: true),
     );
   }

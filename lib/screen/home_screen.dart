@@ -1,12 +1,14 @@
-// ignore_for_file: deprecated_member_use
-
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
 import 'package:vokapedia/screen/bookmark_screen.dart';
 import 'package:vokapedia/screen/library_screen.dart';
+import 'package:vokapedia/screen/profile_screen.dart';
 import 'package:vokapedia/screen/searchh_screen.dart';
 import 'package:vokapedia/services/firestore_services.dart';
+import 'package:vokapedia/screen/add_article_screen.dart';
 import '../widget/custom_bottom_navbar.dart';
 import '../utils/color_constants.dart';
 
@@ -15,8 +17,9 @@ const double _spacingVertical = 15.0;
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
+  final String userRole;
 
-  const HomeScreen({super.key, this.initialIndex = 0});
+  const HomeScreen({super.key, this.initialIndex = 0, required this.userRole});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -27,11 +30,52 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentPage = 0;
   final PageController _pageController = PageController(viewportFraction: 0.9);
 
+  String _userName = 'Pengguna';
+  String? _userPhotoUrl;
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController.addListener(_onPageChanged);
+    _loadUserName();
+  }
+
+  Future<void> _loadUserName() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String? name;
+      String? photoUrl;
+
+      name = user.displayName;
+      photoUrl = user.photoURL;
+
+      if (name == null || name.isEmpty) {
+        try {
+          DocumentSnapshot snap = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+          if (snap.exists && (snap.data() as Map).containsKey('name')) {
+            name = snap['name'];
+          }
+        } catch (e) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          if (name != null && name.isNotEmpty) {
+            _userName = name!.split(' ')[0];
+          } else if (user.email != null) {
+            _userName = user.email!.split('@')[0];
+          } else {
+            _userName = 'Pengguna';
+          }
+
+          _userPhotoUrl = photoUrl;
+        });
+      }
+    }
   }
 
   @override
@@ -48,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const SearchhScreen(),
     const LibraryScreen(),
     const BookmarkScreen(),
-    const Center(child: Text('Halaman Profile')),
+    const ProfileScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -60,28 +104,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHomeBody(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const SizedBox(height: 10),
-              _buildFeaturedContent(),
-              _buildSectionTitle(title: 'Top picks for you'),
-              _buildArticlesList(
-                stream: getArticlesByFeature(field: 'isTopPick', value: true),
-                height: 200,
-              ),
-              _buildSectionTitle(title: 'Continue reading'),
-              _buildArticlesList(
-                stream:
-                    getContinueReadingArticles(), // Memanggil fungsi yang sudah difilter
-                height: 220,
-                isReadingList: true,
-              ),
-              const SizedBox(height: 50),
-            ],
-          ),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const SizedBox(height: 10),
+            _buildFeaturedContent(),
+            _buildSectionTitle(title: 'Top picks for you'),
+            _buildArticlesList(
+              stream: getArticlesByFeature(field: 'isTopPick', value: true),
+              height: 200,
+            ),
+            _buildSectionTitle(title: 'Continue reading'),
+            _buildArticlesList(
+              stream: getContinueReadingArticles(),
+              height: 220,
+              isReadingList: true,
+            ),
+            const SizedBox(height: 100),
+          ],
         ),
       ),
     );
@@ -101,9 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  AppColors.black,
-                ),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
               ),
             ),
           );
@@ -142,6 +181,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget? _buildFab() {
+    if (widget.userRole == 'admin') {
+      return FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddArticleScreen()),
+          );
+        },
+        backgroundColor: AppColors.black,
+        child: const Icon(Icons.add, color: AppColors.white),
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isHome = _currentIndex == 0;
@@ -154,6 +209,8 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: _onItemTapped,
       ),
+      floatingActionButton: isHome ? _buildFab() : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -173,17 +230,17 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.only(left: _paddingHorizontal),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const <Widget>[
+                children: <Widget>[
                   Text(
-                    'Halo Firza!',
-                    style: TextStyle(
+                    'Halo $_userName!',
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: AppColors.black,
                     ),
                   ),
-                  SizedBox(height: 4),
-                  Text(
+                  const SizedBox(height: 4),
+                  const Text(
                     'Siap eksplor bacaan baru untuk belajar?',
                     style: TextStyle(fontSize: 14, color: AppColors.darkGrey),
                   ),
@@ -193,9 +250,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Padding(
             padding: const EdgeInsets.only(right: _paddingHorizontal),
-            child: const CircleAvatar(
-              radius: 24,
-              backgroundImage: AssetImage('assets/img/pp.jpg'),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () {
+                setState(() {
+                  _currentIndex = 4;
+                });
+              },
+              child: CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.backgroundLight,
+                backgroundImage:
+                    _userPhotoUrl != null && _userPhotoUrl!.isNotEmpty
+                    ? NetworkImage(_userPhotoUrl!)
+                    : null,
+                child: _userPhotoUrl == null || _userPhotoUrl!.isEmpty
+                    ? const Icon(Icons.person, color: AppColors.darkGrey)
+                    : null,
+              ),
             ),
           ),
         ],
@@ -214,9 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  AppColors.black,
-                ),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
               ),
             ),
           );

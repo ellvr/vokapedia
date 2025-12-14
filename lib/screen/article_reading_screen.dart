@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/utils/color_constants.dart';
 import 'dart:async';
@@ -48,7 +49,8 @@ class ArticleReadingScreen extends StatefulWidget {
   final String articleTitle;
   final String articleAuthor;
   final String imagePath;
-  final double initialProgress; 
+  final double initialProgress;
+  final String? highlightedTextToFind;
 
   const ArticleReadingScreen({
     super.key,
@@ -57,6 +59,7 @@ class ArticleReadingScreen extends StatefulWidget {
     required this.articleAuthor,
     required this.imagePath,
     this.initialProgress = 0.0,
+    this.highlightedTextToFind,
   });
 
   @override
@@ -66,63 +69,179 @@ class ArticleReadingScreen extends StatefulWidget {
 class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
   ReadingTheme _currentTheme = ReadingTheme.light;
   bool _isThemeSelectorVisible = false;
-  
+
   int _currentPageIndex = 0;
   final int _wordsPerPage = 800;
-  
+
   int _totalPages = 1;
 
+  Article? _articleData;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  List<String> _allArticleWords = [];
+
+  String? _activeHighlightText;
+  int _highlightStartWordIndex = -1;
+  int _highlightEndWordIndex = -1;
+
   ThemeColors get _colors => themeMap[_currentTheme]!;
-  
+
   @override
   void initState() {
     super.initState();
+    _activeHighlightText = widget.highlightedTextToFind;
+    _loadArticleAndInitialize();
   }
 
   @override
   void dispose() {
+    _saveActiveHighlightToHistory();
     super.dispose();
   }
 
-  Future<void> _markAsFinishedAndPop() async {
+  String _cleanWord(String word) {
+    // Menghapus tanda baca umum di akhir kata dan mengubah ke huruf kecil
+    return word.replaceAll(RegExp(r'[.,:;?!"]$'), '').toLowerCase();
+  }
+
+  Future<void> _loadArticleAndInitialize() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('articles')
+          .doc(widget.articleId)
+          .get();
+      if (!doc.exists) {
+        throw Exception("Article with ID ${widget.articleId} not found.");
+      }
+
+      final article = Article.fromFirestore(
+        doc.data() as Map<String, dynamic>,
+        doc.id,
+      );
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && widget.highlightedTextToFind == null) {
+        final historyDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('readingHistory')
+            .doc(widget.articleId)
+            .get();
+
+        if (historyDoc.exists && historyDoc.data()?['lastHighlight'] != null) {
+          _activeHighlightText = historyDoc.data()!['lastHighlight'] as String?;
+        }
+      }
+
+      _allArticleWords = _getAllWords(article);
+      _totalPages = (_allArticleWords.length / _wordsPerPage).ceil();
+
+      _findHighlightAndNavigate();
+
+      if (mounted) {
+        setState(() {
+          _articleData = article;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load article: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveActiveHighlightToHistory() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _activeHighlightText == null) return;
+
     await FirebaseFirestore.instance
-        .collection('saved_articles')
+        .collection('users')
+        .doc(user.uid)
+        .collection('readingHistory')
         .doc(widget.articleId)
-        .set({'readingProgress': 1.0}, SetOptions(merge: true));
+        .set({'lastHighlight': _activeHighlightText}, SetOptions(merge: true));
+  }
+
+  Future<void> _markAsFinishedAndPop() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda harus login untuk menyimpan progres bacaan.'),
+        ),
+      );
+      return;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('readingHistory')
+        .doc(widget.articleId)
+        .set({
+          'readingProgress': 1.0,
+          'articleId': widget.articleId,
+          'title': widget.articleTitle,
+          'author': widget.articleAuthor,
+          'imagePath': widget.imagePath,
+          'savedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Anda telah selesai membaca artikel ini! Progress disimpan.'),
+        content: Text(
+          'Anda telah selesai membaca artikel ini! Progress disimpan.',
+        ),
         duration: Duration(seconds: 2),
       ),
     );
 
     Navigator.pop(context);
   }
-  
+
   Future<void> _saveBookmark(String selectedText) async {
     if (selectedText.trim().isEmpty) {
       return;
     }
 
-    const String userId = 'user123'; 
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda harus login untuk menyimpan bookmark.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     try {
       await FirebaseFirestore.instance
-          .collection('user_bookmarks')
+          .collection('users')
+          .doc(user.uid)
+          .collection('bookmarks')
           .add({
-            'userId': userId,
             'articleId': widget.articleId,
             'articleTitle': widget.articleTitle,
-            'articleAuthor': widget.articleAuthor, 
+            'articleAuthor': widget.articleAuthor,
             'highlightedText': selectedText,
             'createdAt': FieldValue.serverTimestamp(),
           });
 
+      setState(() {
+        _activeHighlightText = selectedText;
+        _findHighlightAndNavigate();
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Berhasil disimpan ke Bookmark!'),
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
           backgroundColor: AppColors.black,
         ),
       );
@@ -137,18 +256,57 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
     }
   }
 
-  Future<Article> _fetchArticleDetail() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('articles')
-          .doc(widget.articleId)
-          .get();
-      if (!doc.exists) {
-        throw Exception("Article with ID ${widget.articleId} not found.");
+  void _findHighlightAndNavigate() {
+    if (_activeHighlightText != null && _allArticleWords.isNotEmpty) {
+      final String highlight = _activeHighlightText!.trim();
+      final List<String> highlightWords = highlight.split(RegExp(r'\s+'));
+
+      bool highlightFound = false;
+
+      if (highlightWords.isNotEmpty) {
+        final String cleanFirstHighlightWord = _cleanWord(highlightWords[0]);
+
+        for (int i = 0; i < _allArticleWords.length; i++) {
+          if (_cleanWord(_allArticleWords[i]) == cleanFirstHighlightWord) {
+            bool match = true;
+            for (int j = 1; j < highlightWords.length; j++) {
+              final String cleanArticleWord = i + j < _allArticleWords.length
+                  ? _cleanWord(_allArticleWords[i + j])
+                  : '';
+
+              if (i + j >= _allArticleWords.length ||
+                  cleanArticleWord != _cleanWord(highlightWords[j])) {
+                match = false;
+                break;
+              }
+            }
+
+            if (match) {
+              _highlightStartWordIndex = i;
+              _highlightEndWordIndex = i + highlightWords.length;
+              highlightFound = true;
+
+              final int pageToNavigate =
+                  (_highlightStartWordIndex / _wordsPerPage).floor();
+
+              if (_currentPageIndex != pageToNavigate) {
+                setState(() {
+                  _currentPageIndex = pageToNavigate.clamp(0, _totalPages - 1);
+                });
+              }
+              break;
+            }
+          }
+        }
       }
-      return Article.fromFirestore(doc.data() as Map<String, dynamic>, doc.id);
-    } catch (e) {
-      throw Exception('Failed to load article: $e');
+
+      if (!highlightFound) {
+        _highlightStartWordIndex = -1;
+        _highlightEndWordIndex = -1;
+      }
+    } else {
+      _highlightStartWordIndex = -1;
+      _highlightEndWordIndex = -1;
     }
   }
 
@@ -169,18 +327,29 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
     if (newIndex >= 0 && newIndex < _totalPages) {
       setState(() {
         _currentPageIndex = newIndex;
-        _saveReadingProgress(newIndex, _totalPages); 
+        _saveReadingProgress(newIndex, _totalPages);
       });
     }
   }
-  
+
   Future<void> _saveReadingProgress(int currentPage, int totalPages) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     if (totalPages > 0) {
       final double progress = (currentPage + 1) / totalPages;
       await FirebaseFirestore.instance
-          .collection('saved_articles')
+          .collection('users')
+          .doc(user.uid)
+          .collection('readingHistory')
           .doc(widget.articleId)
-          .set({'readingProgress': progress}, SetOptions(merge: true));
+          .set({
+            'readingProgress': progress,
+            'articleId': widget.articleId,
+            'title': widget.articleTitle,
+            'author': widget.articleAuthor,
+            'imagePath': widget.imagePath,
+          }, SetOptions(merge: true));
     }
   }
 
@@ -239,18 +408,25 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
       ),
     );
   }
-  
+
   List<String> _getAllWords(Article article) {
     String fullContent = '';
-    
+
     for (var section in article.sections) {
-       fullContent += (section['sectionTitle'] ?? '') + ' ' + (section['content'] ?? '') + ' ';
+      fullContent +=
+          (section['sectionTitle'] ?? '') +
+          ' ' +
+          (section['content'] ?? '') +
+          ' ';
     }
-    
+
     return fullContent.trim().split(RegExp(r'\s+'));
   }
 
-  Widget _customContextMenuBuilder(BuildContext context, EditableTextState editableTextState) {
+  Widget _customContextMenuBuilder(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
     final List<ContextMenuButtonItem> buttonItems = [
       ContextMenuButtonItem(
         onPressed: () {
@@ -267,37 +443,85 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
       ),
       ContextMenuButtonItem(
         onPressed: () {
-          final selectedText = editableTextState.textEditingValue.text.substring(
-            editableTextState.textEditingValue.selection.start,
-            editableTextState.textEditingValue.selection.end,
-          );
+          final selectedText = editableTextState.textEditingValue.text
+              .substring(
+                editableTextState.textEditingValue.selection.start,
+                editableTextState.textEditingValue.selection.end,
+              );
           _saveBookmark(selectedText);
           editableTextState.hideToolbar();
         },
         label: 'Bookmark',
       ),
     ];
-    
+
     return AdaptiveTextSelectionToolbar.buttonItems(
       buttonItems: buttonItems,
       anchors: editableTextState.contextMenuAnchors,
     );
   }
 
+  List<TextSpan> _buildHighlightedTextSpans(
+    List<String> words,
+    int pageStartIndex,
+  ) {
+    List<TextSpan> spans = [];
+
+    if (_highlightStartWordIndex == -1) {
+      for (final word in words) {
+        spans.add(
+          TextSpan(
+            text: '$word ',
+            style: TextStyle(color: _colors.text, fontSize: 16, height: 1.6),
+          ),
+        );
+      }
+      return spans;
+    }
+
+    Color highlightColor = AppColors.primaryBlue.withOpacity(0.4);
+
+    for (int i = 0; i < words.length; i++) {
+      final int wordGlobalIndex = pageStartIndex + i;
+      final String word = words[i];
+
+      final bool isHighlighted =
+          wordGlobalIndex >= _highlightStartWordIndex &&
+          wordGlobalIndex < _highlightEndWordIndex;
+
+      spans.add(
+        TextSpan(
+          text: '$word ',
+          style: TextStyle(
+            backgroundColor: isHighlighted
+                ? highlightColor
+                : Colors.transparent,
+            color: _colors.text,
+            fontSize: 16,
+            height: 1.6,
+          ),
+        ),
+      );
+    }
+    return spans;
+  }
+
   Widget _buildArticleContent(Article article) {
-    final List<String> allWords = _getAllWords(article);
-    final int totalWords = allWords.length;
-    
-    _totalPages = (totalWords / _wordsPerPage).ceil();
+    final int totalWords = _allArticleWords.length;
 
     final int startIndex = _currentPageIndex * _wordsPerPage;
-    final int endIndex = ((_currentPageIndex + 1) * _wordsPerPage).clamp(0, totalWords);
-    
-    final List<String> wordsToShow = allWords.sublist(startIndex, endIndex);
-    final String pageContent = wordsToShow.join(' ');
-    
-    final double readingProgress = (_totalPages > 0) 
-        ? (_currentPageIndex + 1) / _totalPages 
+    final int endIndex = ((_currentPageIndex + 1) * _wordsPerPage).clamp(
+      0,
+      totalWords,
+    );
+
+    final List<String> wordsToShow = _allArticleWords.sublist(
+      startIndex,
+      endIndex,
+    );
+
+    final double readingProgress = (_totalPages > 0)
+        ? (_currentPageIndex + 1) / _totalPages
         : 1.0;
 
     return Column(
@@ -335,58 +559,93 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                         height: 200,
                         loadingBuilder: (context, child, loadingProgress) {
                           if (loadingProgress == null) return child;
-                          return const Center(child: CircularProgressIndicator(strokeWidth: 1.5, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue)));
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.primaryBlue,
+                              ),
+                            ),
+                          );
                         },
                         errorBuilder: (context, error, stackTrace) {
-                          return Container(height: 200, color: AppColors.backgroundLight, child: const Center(child: Text('Cover Image Placeholder', style: TextStyle(color: AppColors.darkGrey))));
+                          return Container(
+                            height: 200,
+                            color: AppColors.backgroundLight,
+                            child: const Center(
+                              child: Text(
+                                'Cover Image Placeholder',
+                                style: TextStyle(color: AppColors.darkGrey),
+                              ),
+                            ),
+                          );
                         },
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0,
+                      vertical: 10.0,
+                    ),
                     child: Text(
                       article.title,
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.3, color: _colors.text),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        height: 1.3,
+                        color: _colors.text,
+                      ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 20.0, top: 5.0, bottom: 15.0),
+                    padding: const EdgeInsets.only(
+                      left: 20.0,
+                      top: 5.0,
+                      bottom: 15.0,
+                    ),
                     child: Text(
                       article.author,
-                      style: TextStyle(fontSize: 14, color: _colors.text.withOpacity(0.6)),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _colors.text.withOpacity(0.6),
+                      ),
                     ),
                   ),
                 ] else ...[
                   const SizedBox(height: 10),
                 ],
-                
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 10.0,
+                  ),
                   child: Theme(
                     data: Theme.of(context).copyWith(
-                      // --- PERBAIKAN DI SINI ---
                       textSelectionTheme: TextSelectionThemeData(
-                        // Menggunakan selectionColor (untuk warna sorotan)
-                        selectionColor: AppColors.primaryBlue.withOpacity(0.4), 
-                        // Menggunakan selectionHandleColor (untuk warna handle)
-                        selectionHandleColor: AppColors.primaryBlue, 
+                        selectionColor: AppColors.primaryBlue.withOpacity(0.4),
+                        selectionHandleColor: AppColors.primaryBlue,
                       ),
-                      // --- AKHIR PERBAIKAN ---
                     ),
-                    child: SelectableText(
-                      pageContent,
-                      style: TextStyle(fontSize: 16, height: 1.6, color: _colors.text),
+                    child: SelectableText.rich(
+                      TextSpan(
+                        style: TextStyle(
+                          fontSize: 16,
+                          height: 1.6,
+                          color: _colors.text,
+                        ),
+                        children: _buildHighlightedTextSpans(
+                          wordsToShow,
+                          startIndex,
+                        ),
+                      ),
                       textAlign: TextAlign.justify,
                       contextMenuBuilder: _customContextMenuBuilder,
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 30),
-
                 _buildPaginationButtons(_totalPages),
-
                 const SizedBox(height: 20),
               ],
             ),
@@ -406,37 +665,50 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           OutlinedButton.icon(
-            onPressed: isFirstPage ? null : () => _goToPage(_currentPageIndex - 1),
-            icon: Icon(Icons.arrow_back, color: isFirstPage ? AppColors.darkGrey : AppColors.black),
+            onPressed: isFirstPage
+                ? null
+                : () => _goToPage(_currentPageIndex - 1),
+            icon: Icon(
+              Icons.arrow_back,
+              color: isFirstPage ? AppColors.darkGrey : AppColors.black,
+            ),
             label: Text(
               'Previous',
-              style: TextStyle(color: isFirstPage ? AppColors.darkGrey : AppColors.black),
+              style: TextStyle(
+                color: isFirstPage ? AppColors.darkGrey : AppColors.black,
+              ),
             ),
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: isFirstPage ? AppColors.darkGrey.withOpacity(0.5) : AppColors.black),
+              side: BorderSide(
+                color: isFirstPage
+                    ? AppColors.darkGrey.withOpacity(0.5)
+                    : AppColors.black,
+              ),
             ),
           ),
-
           Text(
             'Page ${_currentPageIndex + 1} of $totalPages',
             style: TextStyle(fontSize: 16, color: _colors.text),
           ),
-
           ElevatedButton.icon(
             onPressed: isLastPage
                 ? _markAsFinishedAndPop
                 : () => _goToPage(_currentPageIndex + 1),
-            
             icon: Icon(
               isLastPage ? Icons.done : Icons.arrow_forward,
               color: AppColors.white,
             ),
             label: Text(
               isLastPage ? 'Finish' : 'Next',
-              style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: AppColors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isLastPage ? AppColors.primaryBlue : AppColors.black,
+              backgroundColor: isLastPage
+                  ? AppColors.primaryBlue
+                  : AppColors.black,
               foregroundColor: AppColors.white,
             ),
           ),
@@ -452,7 +724,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
       appBar: AppBar(
         title: Text(
           widget.articleTitle.length > 25
-              ? '${widget.articleTitle.substring(0, 25)}...'
+              ? widget.articleTitle.substring(0, 25) + '...'
               : widget.articleTitle,
           style: TextStyle(fontSize: 16, color: _colors.icon),
         ),
@@ -476,63 +748,52 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
           ),
           IconButton(
             icon: Icon(Icons.menu_book, color: _colors.icon),
-            onPressed: () {
-               // Tambahkan logika untuk membuka menu bookmark/highlight
-            },
+            onPressed: () {},
           ),
         ],
       ),
       body: Column(
-            children: [
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                child: Visibility(
-                  visible: _isThemeSelectorVisible,
-                  maintainState: true,
-                  child: _buildThemeSelectorPanel(),
-                ),
-              ),
-              Expanded(
-                child: Stack(
-                  children: [
-                    FutureBuilder<Article>(
-                      future: _fetchArticleDetail(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
-                        }
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(20.0),
-                              child: Text(
-                                'Gagal memuat artikel. Error: ${snapshot.error}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: AppColors.black),
-                              ),
-                            ),
-                          );
-                        }
-                        if (!snapshot.hasData) {
-                          return const Center(child: Text('Konten artikel tidak ditemukan.'));
-                        }
-
-                        return _buildArticleContent(snapshot.data!);
-                      },
-                    ),
-                    if (_isThemeSelectorVisible)
-                      GestureDetector(
-                        onTap: _toggleThemeSelector,
-                        child: Container(
-                          color: Colors.black54.withOpacity(0.4),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
+        children: [
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: Visibility(
+              visible: _isThemeSelectorVisible,
+              maintainState: true,
+              child: _buildThemeSelectorPanel(),
+            ),
           ),
+          Expanded(
+            child: Stack(
+              children: [
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else if (_errorMessage != null)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  )
+                else if (_articleData != null)
+                  _buildArticleContent(_articleData!)
+                else
+                  const Center(child: Text('Konten artikel tidak ditemukan.')),
+
+                if (_isThemeSelectorVisible)
+                  GestureDetector(
+                    onTap: _toggleThemeSelector,
+                    child: Container(color: Colors.black54.withOpacity(0.4)),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

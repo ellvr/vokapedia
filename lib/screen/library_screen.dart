@@ -2,28 +2,48 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/utils/color_constants.dart';
+import 'package:vokapedia/screen/article_reading_screen.dart'; // Import yang dibutuhkan
 
-class LibraryScreen extends StatelessWidget {
+class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
 
+  @override
+  State<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends State<LibraryScreen> {
+  final User? _currentUser = FirebaseAuth.instance.currentUser;
+
   Stream<List<Article>> _getLibraryItems() {
+    if (_currentUser == null) {
+      return Stream.value([]);
+    }
+
     return FirebaseFirestore.instance
-        .collection('saved_articles')
+        .collection('users')
+        .doc(_currentUser.uid)
+        .collection('readingHistory')
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => Article.fromFirestore(doc.data(), doc.id))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+              .toList();
+        });
   }
 
   void _removeItem(BuildContext context, String articleId) {
+    if (_currentUser == null) return;
+
     FirebaseFirestore.instance
-        .collection('saved_articles')
+        .collection('users')
+        .doc(_currentUser.uid)
+        .collection('readingHistory')
         .doc(articleId)
         .delete();
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Item dihapus dari Library.'),
@@ -33,8 +53,28 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
+  void _navigateToReadingScreen(BuildContext context, Article item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ArticleReadingScreen(
+          articleId: item.id,
+          articleTitle: item.title,
+          articleAuthor: item.author,
+          imagePath: item.imagePath,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_currentUser == null) {
+      return const Center(
+        child: Text('Anda harus login untuk melihat Library.'),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
@@ -85,11 +125,11 @@ class LibraryScreen extends StatelessWidget {
                     shrinkWrap: true,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 15.0,
-                      mainAxisSpacing: 15.0,
-                      childAspectRatio: 0.6,
-                    ),
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 15.0,
+                          mainAxisSpacing: 15.0,
+                          childAspectRatio: 0.6,
+                        ),
                     itemCount: libraryItems.length,
                     itemBuilder: (context, index) {
                       final item = libraryItems[index];
@@ -107,125 +147,140 @@ class LibraryScreen extends StatelessWidget {
 
   Widget _buildGridCard(BuildContext context, Article item) {
     final double progress = item.readingProgress?.toDouble() ?? 0.0;
-    
+
     final bool isFinished = progress >= 1.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Stack(
-          children: [
-            Container(
-              height: 180,
-              decoration: BoxDecoration(
-                color: AppColors.backgroundLight,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.darkGrey.withOpacity(0.2)),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.network(
-                  item.imagePath,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(strokeWidth: 1.5),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: AppColors.darkGrey.withOpacity(0.1),
-                      child: const Center(
-                        child: Icon(
-                          Icons.broken_image,
-                          color: AppColors.darkGrey,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    return InkWell(
+      // Menggunakan InkWell agar ada efek visual saat dipencet
+      onTap: () =>
+          _navigateToReadingScreen(context, item), // Panggil fungsi navigasi
+      borderRadius: BorderRadius.circular(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              Container(
+                height: 180,
                 decoration: BoxDecoration(
-                  color: AppColors.white.withOpacity(0.9),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(10),
-                    bottomRight: Radius.circular(10),
+                  color: AppColors.backgroundLight,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.darkGrey.withOpacity(0.2),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: SizedBox(
-                          height: 8,
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor: AppColors.darkGrey.withOpacity(0.3),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              isFinished ? AppColors.primaryBlue : AppColors.primaryBlue,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(
+                    item.imagePath,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: AppColors.darkGrey.withOpacity(0.1),
+                        child: const Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            color: AppColors.darkGrey,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withOpacity(0.9),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(10),
+                      bottomRight: Radius.circular(10),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SizedBox(
+                            height: 8,
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: AppColors.darkGrey.withOpacity(
+                                0.3,
+                              ),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isFinished
+                                    ? AppColors.primaryBlue
+                                    : AppColors.primaryBlue,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    isFinished
-                        ? const Icon(
-                            Icons.check_circle,
-                            size: 20,
-                            color: AppColors.primaryBlue,
-                          )
-                        : const Icon(
-                            Icons.menu_book, 
-                            size: 20,
-                            color: AppColors.black,
-                          ),
-                  ],
+                      const SizedBox(width: 8),
+                      isFinished
+                          ? const Icon(
+                              Icons.check_circle,
+                              size: 20,
+                              color: AppColors.primaryBlue,
+                            )
+                          : const Icon(
+                              Icons.menu_book,
+                              size: 20,
+                              color: AppColors.black,
+                            ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            Positioned(
-              top: 8,
-              right: 8,
-              child: GestureDetector(
-                onTap: () => _removeItem(context, item.id),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.white.withOpacity(0.8),
-                  ),
-                  child: const Icon(
-                    Icons.delete_outline,
-                    size: 20,
-                    color: Colors.red,
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: () => _removeItem(context, item.id),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.white.withOpacity(0.8),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Colors.red,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          item.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14),
-        ),
-      ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            item.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 14),
+          ),
+        ],
+      ),
     );
   }
 }
