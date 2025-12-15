@@ -94,7 +94,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Image
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 0),
                         child: Center(
@@ -106,7 +105,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       const SizedBox(height: 60),
 
-                      // TITLE
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
@@ -122,7 +120,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                       const SizedBox(height: 12),
 
-                      // DESCRIPTION
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(

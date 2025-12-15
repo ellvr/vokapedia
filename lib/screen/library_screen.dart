@@ -1,3 +1,5 @@
+// file: library_screen.dart
+
 // ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
@@ -5,9 +7,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/utils/color_constants.dart';
-import 'dart:convert'; // Wajib untuk Base64
-import 'dart:typed_data'; // Wajib untuk Uint8List
-import 'package:vokapedia/screen/article_reading_screen.dart'; // Import yang dibutuhkan
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:vokapedia/screen/article_reading_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -28,11 +30,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
         .collection('users')
         .doc(_currentUser.uid)
         .collection('readingHistory')
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => Article.fromFirestore(doc.data(), doc.id))
-              .toList();
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return Article.fromFirestore(data, doc.id);
+          }).toList();
         });
   }
 
@@ -55,9 +59,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // ================================
-  // ⚙️ FUNGSI UNTUK MENANGANI LOGIKA GAMBAR (Pembantu Lokal)
-  // ================================
   Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
     bool isNetworkUrl =
         imagePath.startsWith('http://') || imagePath.startsWith('https://');
@@ -65,7 +66,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     Widget imageWidget;
 
-    // Warna placeholder saat loading/error
     final Color placeholderColor = AppColors.darkGrey.withOpacity(0.1);
 
     if (isNetworkUrl) {
@@ -107,7 +107,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
           fit: BoxFit.cover,
         );
       } catch (e) {
-        // Fallback jika konversi Base64 gagal
         imageWidget = Container(
           color: placeholderColor,
           child: const Center(
@@ -116,7 +115,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
         );
       }
     } else {
-      // Path kosong atau tidak valid
       imageWidget = Container(
         color: placeholderColor,
         child: const Center(
@@ -126,7 +124,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     return imageWidget;
   }
-  // =========================================================
 
   void _navigateToReadingScreen(BuildContext context, Article item) {
     Navigator.push(
@@ -137,6 +134,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           articleTitle: item.title,
           articleAuthor: item.author,
           imagePath: item.imagePath,
+          initialProgress: item.readingProgress?.toDouble() ?? 0.0,
         ),
       ),
     );
@@ -222,21 +220,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildGridCard(BuildContext context, Article item) {
     final double progress = item.readingProgress?.toDouble() ?? 0.0;
-
-
-    final bool isFinished = progress >= 1.0;
+    final bool isFinished = progress >= 0.9999;
 
     return GestureDetector(
-      // Tambahkan onTap untuk membuka detail artikel
-      onTap: () {
-        // Asumsi Anda memiliki ArticleDetailScreen yang dapat diakses:
-        // Navigator.push(
-        //   context,
-        //   MaterialPageRoute(
-        //     builder: (context) => ArticleDetailScreen(articleId: item.id),
-        //   ),
-        // );
-      },
+      onTap: () => _navigateToReadingScreen(context, item),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -253,7 +240,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  // 👇 PANGGIL FUNGSI IMAGE BARU DI SINI
                   child: _buildArticleImage(
                     item.imagePath,
                     width: double.infinity,
@@ -290,10 +276,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               backgroundColor: AppColors.darkGrey.withOpacity(
                                 0.3,
                               ),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                isFinished
-                                    ? AppColors.primaryBlue
-                                    : AppColors.primaryBlue,
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                AppColors.primaryBlue,
                               ),
                             ),
                           ),
@@ -306,63 +290,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               size: 20,
                               color: AppColors.primaryBlue,
                             )
-                          : const Icon(
-                              Icons.menu_book,
-                              size: 20,
-                              color: AppColors.black,
-                            ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.white.withOpacity(0.9),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(10),
-                      bottomRight: Radius.circular(10),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: SizedBox(
-                            height: 8,
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              backgroundColor: AppColors.darkGrey.withOpacity(
-                                0.3,
+                          : Text(
+                              '${(progress * 100).toInt()}%',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.black,
                               ),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                isFinished
-                                    ? AppColors.primaryBlue
-                                    : AppColors.primaryBlue,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      isFinished
-                          ? const Icon(
-                              Icons.check_circle,
-                              size: 20,
-                              color: AppColors.primaryBlue,
-                            )
-                          : const Icon(
-                              Icons.menu_book,
-                              size: 20,
-                              color: AppColors.black,
                             ),
                     ],
                   ),
@@ -402,4 +336,3 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 }
-

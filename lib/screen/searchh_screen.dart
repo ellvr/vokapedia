@@ -1,7 +1,9 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:vokapedia/services/firestore_services.dart'; 
+import 'package:vokapedia/services/firestore_services.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
 import '../utils/color_constants.dart';
@@ -143,7 +145,8 @@ class _SearchhScreenState extends State<SearchhScreen> {
     String query = '',
   }) {
     bool isNetworkUrl =
-        item.imagePath.startsWith('http://') || item.imagePath.startsWith('https://');
+        item.imagePath.startsWith('http://') ||
+        item.imagePath.startsWith('https://');
     bool isBase64Data = item.imagePath.length > 100 && !isNetworkUrl;
 
     Widget imageWidget;
@@ -196,31 +199,53 @@ class _SearchhScreenState extends State<SearchhScreen> {
 
     String fullText = '';
     if (showSnippet) {
-      final sectionsText = item.sections.map((s) {
-        final head = s["heading"] ?? "";
-        final paras = s["paragraphs"] is List
-            ? (s["paragraphs"] as List).join(" ")
-            : (s["paragraphs"] ?? "");
-        return "$head $paras";
-      }).join(" ");
+      final sectionsText = item.sections
+          .map((s) {
+            final head = s["heading"] ?? "";
+            final paras = s["paragraphs"] is List
+                ? (s["paragraphs"] as List).join(" ")
+                : (s["paragraphs"] ?? "");
+            return "$head $paras";
+          })
+          .join(" ");
 
-      fullText = "${item.title} ${item.author} ${item.abstractContent ?? ""} $sectionsText";
+      fullText =
+          "${item.title} ${item.author} ${item.abstractContent ?? ""} $sectionsText";
     }
 
-    final DateTime articleDate = item.createdAt?.toDate() ?? DateTime.now(); 
+    final DateTime articleDate = item.createdAt?.toDate() ?? DateTime.now();
 
     final List<String> displayTags = [];
-    
+
     if (item.kelas != null && item.kelas!.isNotEmpty) {
-      displayTags.add(item.kelas!.toUpperCase()); 
+      displayTags.add(item.kelas!.toUpperCase());
     }
 
-    if (item.tags != null && item.tags!.isNotEmpty) {
-      final optionalTags = item.tags!
-          .split(RegExp(r'[,\s]+'))
-          .where((tag) => tag.isNotEmpty && tag.toUpperCase() != item.kelas?.toUpperCase())
-          .toList();
-      displayTags.addAll(optionalTags);
+    if (item.tags != null) {
+      if (item.tags is String && (item.tags as String).isNotEmpty) {
+        final optionalTags = (item.tags as String)
+            .split(RegExp(r'[,\s]+'))
+            .where(
+              (tag) =>
+                  tag.isNotEmpty &&
+                  tag.toUpperCase() != item.kelas?.toUpperCase(),
+            )
+            .toList();
+        displayTags.addAll(optionalTags);
+      } else if (item.tags is List) {
+        final List<String> tagsList = (item.tags as List)
+            .whereType<String>()
+            .toList();
+
+        final optionalTags = tagsList
+            .where(
+              (tag) =>
+                  tag.isNotEmpty &&
+                  tag.toUpperCase() != item.kelas?.toUpperCase(),
+            )
+            .toList();
+        displayTags.addAll(optionalTags);
+      }
     }
 
     return GestureDetector(
@@ -237,50 +262,49 @@ class _SearchhScreenState extends State<SearchhScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Gambar Artikel
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               child: Container(
                 width: 84,
                 height: 108,
                 color: AppColors.softBlue,
-                child: imageWidget, 
+                child: imageWidget,
               ),
             ),
             const SizedBox(width: 12),
 
-            // Konten Artikel
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Judul (RichText untuk Highlighting)
-                  RichText( 
+                  RichText(
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    text: showSnippet 
+                    text: showSnippet
                         ? highlightText(item.title, query)
                         : TextSpan(
                             text: item.title,
                             style: const TextStyle(
-                              fontSize: 18,
+                              fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: AppColors.black,
+                              fontFamily: 'PlayfairDisplay',
                             ),
                           ),
                   ),
                   const SizedBox(height: 4),
 
-                  RichText( 
+                  RichText(
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    text: showSnippet 
+                    text: showSnippet
                         ? highlightText(item.author, query)
                         : TextSpan(
                             text: item.author,
                             style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.darkGrey,
+                              fontFamily: 'PlayfairDisplay',
                             ),
                           ),
                   ),
@@ -291,10 +315,7 @@ class _SearchhScreenState extends State<SearchhScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       text: highlightText(
-                        extractSnippet(
-                          fullText, 
-                          query,
-                        ),
+                        extractSnippet(fullText, query),
                         query,
                       ),
                     )
@@ -302,10 +323,12 @@ class _SearchhScreenState extends State<SearchhScreen> {
                     Wrap(
                       spacing: 8.0,
                       runSpacing: 4.0,
-                      children: displayTags.map((tag) => _buildTag(tag)).toList(),
+                      children: displayTags
+                          .map((tag) => _buildTag(tag))
+                          .toList(),
                     ),
 
-                  const SizedBox(height: 16), 
+                  const SizedBox(height: 6),
 
                   Text(
                     "Diunggah: ${_formatDate(articleDate)}",
@@ -330,50 +353,33 @@ class _SearchhScreenState extends State<SearchhScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                // 🔙 BACK BUTTON
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    child: const Icon(Icons.arrow_back, color: AppColors.black),
-                  ),
+            child: TextField(
+              controller: _controller,
+              onChanged: (value) {
+                setState(() => searchText = value);
+              },
+              decoration: InputDecoration(
+                hintText: 'Search...',
+                prefixIcon: const Icon(Icons.search),
+
+                suffixIcon: searchText.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () {
+                          _controller.clear();
+                          setState(() => searchText = "");
+                        },
+                        child: const Icon(Icons.close),
+                      )
+                    : null,
+
+                filled: true,
+                fillColor: AppColors.backgroundLight,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(50),
+                  borderSide: BorderSide.none,
                 ),
-
-                const SizedBox(width: 12),
-
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    onChanged: (value) {
-                      setState(() => searchText = value);
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Search for title or author...',
-                      prefixIcon: const Icon(Icons.search),
-
-                      suffixIcon: searchText.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () {
-                                _controller.clear();
-                                setState(() => searchText = "");
-                              },
-                              child: const Icon(Icons.close),
-                            )
-                          : null,
-
-                      filled: true,
-                      fillColor: AppColors.backgroundLight,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(50),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
 
@@ -430,7 +436,6 @@ class _SearchhScreenState extends State<SearchhScreen> {
                       ),
                     ],
                   )
-
                 : StreamBuilder<List<Article>>(
                     stream: searchArticles(searchText),
                     builder: (context, snapshot) {
@@ -445,7 +450,8 @@ class _SearchhScreenState extends State<SearchhScreen> {
                       final results = snapshot.data!;
                       if (results.isEmpty) {
                         return const Center(
-                            child: Text("Tidak ada artikel yang ditemukan."));
+                          child: Text("Tidak ada artikel yang ditemukan."),
+                        );
                       }
 
                       return ListView.builder(
@@ -455,14 +461,15 @@ class _SearchhScreenState extends State<SearchhScreen> {
                           final item = results[index];
                           return _buildArticleListItem(
                             item,
-                            showSnippet: true, 
-                            query: searchText, 
+                            showSnippet: true,
+                            query: searchText,
                           );
                         },
                       );
                     },
                   ),
           ),
+          SizedBox(height: 10),
         ],
       ),
     );

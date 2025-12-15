@@ -32,7 +32,15 @@ class BookmarkScreen extends StatelessWidget {
 
   void _removeBookmark(BuildContext context, String bookmarkId) {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda harus login untuk menghapus bookmark.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     FirebaseFirestore.instance
         .collection('users')
@@ -40,6 +48,7 @@ class BookmarkScreen extends StatelessWidget {
         .collection('bookmarks')
         .doc(bookmarkId)
         .delete();
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Highlight dihapus.'),
@@ -133,7 +142,7 @@ class BookmarkScreen extends StatelessWidget {
           if (bookmarkItems.isEmpty) {
             return const Center(
               child: Text(
-                'Belum ada teks yang ditandai (highlight).',
+                'Belum ada teks yang ditandai. Yuk mulai highlight',
                 style: TextStyle(color: AppColors.darkGrey),
               ),
             );
@@ -156,9 +165,9 @@ class BookmarkScreen extends StatelessWidget {
   }
 
   Widget _buildBookmarkCard(BuildContext context, BookmarkItem item) {
-    final formattedDate = DateFormat(
-      'dd MMM yyyy, HH:mm',
-    ).format(item.dateSaved);
+    final formattedDate = item.createdAt != null
+        ? DateFormat('dd MMM yyyy, HH:mm').format(item.createdAt!.toDate())
+        : 'Unknown Date';
 
     return InkWell(
       onTap: () => _navigateToArticle(context, item),

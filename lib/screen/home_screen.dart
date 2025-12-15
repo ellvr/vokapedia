@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -9,10 +11,9 @@ import 'package:vokapedia/screen/bookmark_screen.dart';
 import 'package:vokapedia/screen/library_screen.dart';
 import 'package:vokapedia/screen/profile_screen.dart';
 import 'package:vokapedia/screen/searchh_screen.dart';
-import 'package:vokapedia/services/firestore_services.dart';
-import 'package:vokapedia/screen/add_article_screen.dart';
 import '../widget/custom_bottom_navbar.dart';
 import '../utils/color_constants.dart';
+import 'package:rxdart/rxdart.dart';
 
 const double _paddingHorizontal = 15.0;
 const double _spacingVertical = 15.0;
@@ -29,11 +30,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  int _currentPage = 0;
   final PageController _pageController = PageController(viewportFraction: 0.9);
+  final ValueNotifier<int> _pageNotifier = ValueNotifier(0);
 
   String _userName = 'Pengguna';
   String? _userPhotoUrl;
+  String? _currentUserClass;
 
   List<Article> _featuredArticles = [];
   bool _isFeaturedLoading = true;
@@ -42,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    _loadUserName();
+    _loadUserData();
     _loadFeaturedArticles();
   }
 
@@ -52,26 +54,28 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadUserName() async {
+  Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       String? name;
       String? photoUrl;
+      String? userClass;
 
       name = user.displayName;
       photoUrl = user.photoURL;
 
-      if (name == null || name.isEmpty) {
-        try {
-          DocumentSnapshot snap = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
-          if (snap.exists && (snap.data() as Map).containsKey('name')) {
-            name = snap['name'];
-          }
-        } catch (_) {}
-      }
+      try {
+        DocumentSnapshot snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (snap.exists && (snap.data() as Map).containsKey('name')) {
+          name = snap['name'];
+        }
+        if (snap.exists && (snap.data() as Map).containsKey('kelas')) {
+          userClass = snap['kelas'];
+        }
+      } catch (_) {}
 
       if (mounted) {
         setState(() {
@@ -83,20 +87,117 @@ class _HomeScreenState extends State<HomeScreen> {
             _userName = 'Pengguna';
           }
           _userPhotoUrl = photoUrl;
+          _currentUserClass = userClass;
         });
       }
     }
   }
 
   Future<void> _loadFeaturedArticles() async {
-    getArticlesByFeature(field: 'isFeatured', value: true).first.then((data) {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('articles')
+          .where('isFeatured', isEqualTo: true)
+          .get();
+
+      final data = snapshot.docs
+          .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+          .toList();
+
       if (mounted) {
         setState(() {
           _featuredArticles = data;
           _isFeaturedLoading = false;
         });
       }
-    });
+    } catch (e) {
+      debugPrint('Error loading featured articles: $e');
+      if (mounted) {
+        setState(() {
+          _isFeaturedLoading = false;
+        });
+      }
+    }
+  }
+
+  Stream<List<Article>> _getRecommendedArticlesStream(String userClass) {
+    final userRole = widget.userRole;
+
+    if (userRole == 'admin') {
+      return FirebaseFirestore.instance
+          .collection('articles')
+          .snapshots()
+          .map(
+            (snapshot) => snapshot.docs
+                .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+                .toList(),
+          );
+    } else {
+      String classFilter;
+      if (userClass == '10') {
+        classFilter = 'Kelas X';
+      } else if (userClass == '11') {
+        classFilter = 'Kelas XI';
+      } else if (userClass == '12') {
+        classFilter = 'Kelas XII';
+      } else {
+        return Stream.value([]);
+      }
+
+      final streamSpecific = FirebaseFirestore.instance
+          .collection('articles')
+          .where('kelas', isEqualTo: classFilter)
+          .snapshots()
+          .map(
+            (snapshot) => snapshot.docs
+                .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+                .toList(),
+          );
+
+      final streamGeneral = FirebaseFirestore.instance
+          .collection('articles')
+          .where('kelas', isEqualTo: 'Umum')
+          .snapshots()
+          .map(
+            (snapshot) => snapshot.docs
+                .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+                .toList(),
+          );
+
+      return Rx.combineLatest2(streamSpecific, streamGeneral, (
+        List<Article> specific,
+        List<Article> general,
+      ) {
+        final combined = [...specific, ...general];
+
+        final uniqueArticles = <String, Article>{};
+        for (var article in combined) {
+          uniqueArticles[article.id] = article;
+        }
+        return uniqueArticles.values.toList();
+      });
+    }
+  }
+
+  Stream<List<Article>> _getContinueReadingStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream.value([]);
+    }
+
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('readingHistory')
+        .where('readingProgress', isLessThan: 1.0)
+        .orderBy('readingProgress')
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return Article.fromFirestore(data, doc.id);
+          }).toList();
+        });
   }
 
   final List<Widget> _screens = [
@@ -130,7 +231,11 @@ class _HomeScreenState extends State<HomeScreen> {
           return Container(
             color: AppColors.backgroundLight,
             child: const Center(
-              child: Icon(Icons.broken_image, size: 30, color: AppColors.darkGrey),
+              child: Icon(
+                Icons.broken_image,
+                size: 30,
+                color: AppColors.darkGrey,
+              ),
             ),
           );
         },
@@ -154,7 +259,11 @@ class _HomeScreenState extends State<HomeScreen> {
         imageWidget = Container(
           color: AppColors.backgroundLight,
           child: const Center(
-            child: Icon(Icons.error_outline, size: 30, color: AppColors.darkGrey),
+            child: Icon(
+              Icons.error_outline,
+              size: 30,
+              color: AppColors.darkGrey,
+            ),
           ),
         );
       }
@@ -162,7 +271,11 @@ class _HomeScreenState extends State<HomeScreen> {
       imageWidget = Container(
         color: AppColors.backgroundLight,
         child: const Center(
-          child: Icon(Icons.image_not_supported, size: 30, color: AppColors.darkGrey),
+          child: Icon(
+            Icons.image_not_supported,
+            size: 30,
+            color: AppColors.darkGrey,
+          ),
         ),
       );
     }
@@ -178,18 +291,35 @@ class _HomeScreenState extends State<HomeScreen> {
           children: <Widget>[
             const SizedBox(height: 10),
             _buildFeaturedContent(),
-            _buildSectionTitle(title: 'Top picks for you'),
-            _buildArticlesList(
-              stream: getArticlesByFeature(field: 'isTopPick', value: true),
-              height: 200,
+            _buildSectionTitle(
+              title: widget.userRole == 'admin'
+                  ? 'All article'
+                  : 'Top picks for you',
             ),
-            _buildSectionTitle(title: 'Continue reading'), 
+
+            if (_currentUserClass == null && widget.userRole == 'siswa')
+              const SizedBox(
+                height: 210,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
+                  ),
+                ),
+              )
+            else
+              _buildArticlesList(
+                stream: _getRecommendedArticlesStream(_currentUserClass ?? ''),
+                height: 210,
+              ),
+            const SizedBox(height: 10),
+            _buildSectionTitle(title: 'Continue reading'),
             _buildArticlesList(
-              stream: getContinueReadingArticles(),
-              height: 220,
+              stream: _getContinueReadingStream(),
+              height: 210,
               isReadingList: true,
             ),
-            const SizedBox(height: 100), 
+            const SizedBox(height: 30),
           ],
         ),
       ),
@@ -216,10 +346,28 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
+        if (snapshot.hasError) {
+          debugPrint('Stream Error: ${snapshot.error}');
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _paddingHorizontal),
+            child: Text(
+              'Error memuat data: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }
+
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(horizontal: _paddingHorizontal),
-            child: Text('Belum ada artikel di bagian ini.'),
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _paddingHorizontal),
+            child: Text(
+              isReadingList
+                  ? 'Semua artikel sudah dibaca. Yuk tambah librarymu!'
+                  : widget.userRole == 'admin'
+                  ? 'Belum ada artikel di database.'
+                  : 'Belum ada artikel yang sesuai dengan kelas Anda.',
+              style: const TextStyle(color: AppColors.darkGrey),
+            ),
           );
         }
 
@@ -291,9 +439,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Siap eksplor bacaan baru untuk belajar?',
-                    style: TextStyle(fontSize: 14, color: AppColors.darkGrey),
+                  Text(
+                    widget.userRole == 'admin'
+                        ? 'Anda login sebagai Administrator.'
+                        : 'Siap eksplor bacaan baru untuk belajar?',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -311,7 +461,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: CircleAvatar(
                 radius: 24,
                 backgroundColor: AppColors.backgroundLight,
-                backgroundImage: _userPhotoUrl != null && _userPhotoUrl!.isNotEmpty
+                backgroundImage:
+                    _userPhotoUrl != null && _userPhotoUrl!.isNotEmpty
                     ? NetworkImage(_userPhotoUrl!)
                     : null,
                 child: _userPhotoUrl == null || _userPhotoUrl!.isEmpty
@@ -353,9 +504,7 @@ class _HomeScreenState extends State<HomeScreen> {
             controller: _pageController,
             itemCount: featuredContent.length,
             onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
+              _pageNotifier.value = index;
             },
             itemBuilder: (context, index) {
               final item = featuredContent[index];
@@ -373,10 +522,50 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.only(right: 20),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: _buildArticleImage(
-                      item.imagePath,
-                      width: double.infinity,
-                      height: double.infinity,
+                    child: Stack(
+                      children: [
+                        _buildArticleImage(
+                          item.imagePath,
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
+
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: 60,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  Colors.black.withOpacity(0.9),
+                                  Colors.black.withOpacity(0.4),
+                                  Colors.black.withOpacity(0.0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Teks Judul
+                        Positioned(
+                          bottom: 8,
+                          left: 12,
+                          right: 12,
+                          child: Text(
+                            item.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -386,9 +575,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 10.0),
-          child: _DotIndicator(
-            count: featuredContent.length,
-            currentIndex: _currentPage,
+          child: ValueListenableBuilder<int>(
+            valueListenable: _pageNotifier,
+            builder: (context, value, _) {
+              return _DotIndicator(
+                count: featuredContent.length,
+                currentIndex: value,
+              );
+            },
           ),
         ),
       ],
@@ -442,7 +636,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              
               child: _buildArticleImage(
                 item.imagePath,
                 width: double.infinity,
@@ -457,11 +650,10 @@ class _HomeScreenState extends State<HomeScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12),
           ),
-          if (isReadingList)
-            Text(
-              subtitleText,
-              style: const TextStyle(fontSize: 12, color: AppColors.darkGrey),
-            ),
+          Text(
+            subtitleText,
+            style: const TextStyle(fontSize: 12, color: AppColors.darkGrey),
+          ),
         ],
       ),
     );

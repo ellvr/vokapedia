@@ -1,14 +1,17 @@
+// ignore_for_file: unused_field, use_build_context_synchronously, deprecated_member_use, prefer_interpolation_to_compose_strings
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/screen/article_reading_screen.dart';
-import 'package:vokapedia/screen/home_screen.dart';
 import 'package:vokapedia/utils/color_constants.dart';
 import 'dart:async';
-import 'dart:convert'; 
-import 'dart:typed_data'; 
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:share_plus/share_plus.dart';
+
+import 'package:html/parser.dart' show parse;
 
 const String _apkDownloadLink = 'https://clips.id/VokaPediaApps';
 
@@ -26,7 +29,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   Article? _articleData;
   bool _isArticleSaved = false;
   String _currentUserRole = 'user';
-  final bool _isAbstractExpanded = false; // Dari Head
+  final bool _isAbstractExpanded = false;
 
   @override
   void initState() {
@@ -35,26 +38,38 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   }
 
   Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
-    bool isNetworkUrl =
-        imagePath.startsWith('http://') || imagePath.startsWith('https://');
-    bool isBase64Data = imagePath.length > 100 && !isNetworkUrl;
-
-    Widget imageWidget;
     
-    Widget defaultPlaceholder = Container(
+    if (imagePath.isEmpty) {
+      return Container(
         height: height,
         color: AppColors.backgroundLight,
         child: const Center(
           child: Text(
-            'Cover Image Placeholder',
+            'Gambar tidak tersedia',
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
           ),
         ),
       );
+    }
 
+    bool isNetworkUrl =
+        imagePath.startsWith('http://') || imagePath.startsWith('https://');
+
+    Widget defaultPlaceholder = Container(
+      height: height,
+      color: AppColors.backgroundLight,
+      child: const Center(
+        child: Text(
+          'Gagal memuat cover',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
+        ),
+      ),
+    );
 
     if (isNetworkUrl) {
-      imageWidget = Image.network(
+      return Image.network(
         imagePath,
         width: width,
         height: height,
@@ -62,25 +77,23 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return Container(
-             height: height,
-             color: AppColors.backgroundLight,
-             child: const Center(child: CircularProgressIndicator(strokeWidth: 1.5, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue))),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
             height: height,
             color: AppColors.backgroundLight,
             child: const Center(
-              child: Text(
-                'Gagal memuat cover',
-                style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppColors.primaryBlue,
+                ),
               ),
             ),
           );
         },
+        errorBuilder: (context, error, stackTrace) {
+          return defaultPlaceholder;
+        },
       );
-    } else if (isBase64Data) {
+    } else {
       try {
         String base64String = imagePath.contains(',')
             ? imagePath.split(',').last
@@ -88,22 +101,23 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
         Uint8List imageBytes = base64Decode(base64String);
 
-        imageWidget = Image.memory(
+        return Image.memory(
           imageBytes,
           width: width,
           height: height,
           fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('Image.memory render failed: $error');
+            return defaultPlaceholder;
+          },
         );
       } catch (e) {
         debugPrint('Base64 Decode Error in Detail: $e');
-        imageWidget = defaultPlaceholder;
+        return defaultPlaceholder;
       }
-    } else {
-      imageWidget = defaultPlaceholder;
     }
-    return imageWidget;
   }
-  
+
   Future<Article> _fetchArticleDetailAndUserState() async {
     final doc = await FirebaseFirestore.instance
         .collection('articles')
@@ -153,20 +167,22 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     return article;
   }
 
-
-  String _getArticleContentPreview(Article article, {int wordLimit = 50}) {
+  String _getArticleContentPreview(Article article, {int wordLimit = 70}) {
     String fullContent = '';
 
-    if (article.abstractContent != null && article.abstractContent!.isNotEmpty) {
+    if (article.abstractContent != null &&
+        article.abstractContent!.isNotEmpty) {
       fullContent += '${article.abstractContent!}\n\n';
     }
 
     for (var section in article.sections) {
       final content = section['paragraphs'] ?? section['content'] ?? '';
-       if (content is List) {
-          fullContent += (section['heading'] ?? '') + ' ' + content.join(' ') + ' ';
+      if (content is List) {
+        fullContent +=
+            (section['heading'] ?? '') + ' ' + content.join(' ') + ' ';
       } else {
-          fullContent += (section['heading'] ?? '') + ' ' + content.toString() + ' ';
+        fullContent +=
+            (section['heading'] ?? '') + ' ' + content.toString() + ' ';
       }
     }
 
@@ -174,10 +190,13 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
       return 'Konten artikel belum tersedia.';
     }
 
-    final words = fullContent.trim().split(RegExp(r'\s+'));
+    final document = parse(fullContent);
+    final String cleanText = document.body!.text;
+
+    final words = cleanText.trim().split(RegExp(r'\s+'));
 
     if (words.length <= wordLimit) {
-      return fullContent.trim();
+      return words.join(' ');
     }
 
     final preview = words.sublist(0, wordLimit).join(' ');
@@ -200,6 +219,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Anda harus login untuk menyimpan artikel.'),
+          backgroundColor: Colors.orange,
         ),
       );
       return;
@@ -210,47 +230,54 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         .doc(user.uid)
         .collection('readingHistory')
         .doc(article.id);
-    
-    if (_isArticleSaved) {
-      await docRef.delete();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Dihapus dari Library.'),
-          duration: Duration(seconds: 1),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } else {
-      await docRef.set({
-        'articleId': article.id,
-        'title': article.title,
-        'author': article.author,
-        'imagePath': article.imagePath,
-        'savedAt': FieldValue.serverTimestamp(),
-        'readingProgress': 0.0,
-      }, SetOptions(merge: true));
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Berhasil ditambahkan ke Library!'),
-          duration: Duration(seconds: 2),
-          backgroundColor: AppColors.primaryBlue,
-        ),
-      );
+    final bool wasSaved = _isArticleSaved;
+
+    if (mounted) {
+      setState(() {
+        _isArticleSaved = !wasSaved;
+      });
     }
 
-    setState(() {
-      _isArticleSaved = !_isArticleSaved;
-    });
+    try {
+      if (wasSaved) {
+        await docRef.delete();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dihapus dari Library.'),
+            duration: Duration(seconds: 1),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else {
+        await docRef.set({
+          'articleId': article.id,
+          'title': article.title,
+          'author': article.author,
+          'imagePath': article.imagePath,
+          'createdAt': FieldValue.serverTimestamp(),
+          'readingProgress': 0.0,
+        }, SetOptions(merge: true));
 
-    if (_isArticleSaved) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              HomeScreen(initialIndex: 2, userRole: _currentUserRole), 
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Berhasil ditambahkan ke Library!'),
+            duration: Duration(seconds: 2),
+            backgroundColor: AppColors.primaryBlue,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isArticleSaved = wasSaved;
+        });
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal: ${e.toString()}. Status tombol dikembalikan.'),
+          backgroundColor: Colors.red,
         ),
-        (Route<dynamic> route) => false,
       );
     }
   }
@@ -260,6 +287,10 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
+        title: Text(
+          _articleData?.title ?? 'Detail Artikel',
+          style: const TextStyle(color: AppColors.black),
+        ),
         backgroundColor: AppColors.white,
         elevation: 0,
         leading: IconButton(
@@ -272,10 +303,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           IconButton(
             icon: const Icon(Icons.share, color: AppColors.black),
             onPressed: _articleData != null
-                ? () => _shareArticle(_articleData!) 
+                ? () => _shareArticle(_articleData!)
                 : null,
           ),
-          IconButton(icon: const Icon(Icons.more_vert, color: AppColors.black), onPressed: () {}),
         ],
       ),
       body: FutureBuilder<Article>(
@@ -289,13 +319,12 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
               child: Text('Error memuat artikel: ${snapshot.error}'),
             );
           }
-          // Memeriksa _articleData, bukan snapshot.hasData
-          if (!snapshot.hasData || _articleData == null) { 
+          if (!snapshot.hasData || _articleData == null) {
             return const Center(child: Text('Artikel tidak ditemukan.'));
           }
 
           final article = _articleData!;
-          
+
           return _buildDetailBody(context, article);
         },
       ),
@@ -306,19 +335,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     final buttonIcon = _isArticleSaved ? Icons.check : Icons.add;
     final buttonText = _isArticleSaved ? 'Saved' : 'Library';
 
-    // Logika warna tombol dari Remote/Head
-    // final Color buttonColor = AppColors.black;
-    // final Color borderColor = AppColors.black;
-
-    final Color buttonColor = _isArticleSaved
-        ? AppColors.black
-        : AppColors.black;
-    final Color borderColor = _isArticleSaved
-        ? AppColors.black
-        : AppColors.black;
-    final Color backgroundColor = _isArticleSaved
-        ? Colors.grey.shade300
-        : Colors.transparent;
+    final Color buttonColor = AppColors.black;
+    final Color borderColor = AppColors.black;
 
     return Stack(
       children: [
@@ -347,7 +365,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8.0),
-                        // 👇 MENGGUNAKAN FUNGSI _buildArticleImage BARU
                         child: _buildArticleImage(
                           article.imagePath,
                           width: double.infinity,
@@ -409,9 +426,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   child: Text(
-                    // Hanya menampilkan preview 70 kata (sesuai Remote)
-                    _getArticleContentPreview(article, wordLimit: 70), 
-                    
+                    _getArticleContentPreview(article),
                     style: const TextStyle(
                       fontSize: 16,
                       height: 1.6,
@@ -491,16 +506,15 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   child: OutlinedButton(
                     onPressed: () => _toggleLibraryStatus(article),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: buttonColor, 
-                      side: BorderSide(
-                        color: borderColor,
-                        width: 2,
-                      ), 
+                      foregroundColor: buttonColor,
+                      side: BorderSide(color: borderColor, width: 2),
                       minimumSize: const Size(double.infinity, 50),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      backgroundColor: _isArticleSaved ? AppColors.black.withOpacity(0.1) : Colors.transparent, 
+                      backgroundColor: _isArticleSaved
+                          ? AppColors.black.withOpacity(0.1)
+                          : Colors.transparent,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,

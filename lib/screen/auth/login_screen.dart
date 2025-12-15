@@ -20,6 +20,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
 
+  bool _isPasswordVisible = false;
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -123,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildInputFields() {
-    InputDecoration inputDecoration(String label) {
+    InputDecoration inputDecoration(String label, {Widget? suffixIcon}) {
       return InputDecoration(
         labelText: label,
         floatingLabelBehavior: FloatingLabelBehavior.never,
@@ -134,6 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
           borderRadius: BorderRadius.circular(50),
           borderSide: BorderSide.none,
         ),
+        suffixIcon: suffixIcon,
       );
     }
 
@@ -146,8 +149,22 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 16),
         TextField(
           controller: _passwordController,
-          obscureText: true,
-          decoration: inputDecoration("Password"),
+
+          obscureText: !_isPasswordVisible,
+          decoration: inputDecoration(
+            "Password",
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                color: Colors.grey,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isPasswordVisible = !_isPasswordVisible;
+                });
+              },
+            ),
+          ),
         ),
       ],
     );

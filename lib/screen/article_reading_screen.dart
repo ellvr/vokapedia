@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use, prefer_interpolation_to_compose_strings, unused_element
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,7 +7,10 @@ import 'package:vokapedia/models/article_model.dart';
 import 'package:vokapedia/utils/color_constants.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+
+import 'package:html_unescape/html_unescape.dart';
+import 'package:html/parser.dart' show parse;
 
 enum ReadingTheme { light, dark, sepia }
 
@@ -71,7 +76,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
   bool _isThemeSelectorVisible = false;
 
   int _currentPageIndex = 0;
-  final int _wordsPerPage = 800;
+  final int _wordsPerPage = 300;
 
   int _totalPages = 1;
 
@@ -81,50 +86,48 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
 
   List<String> _allArticleWords = [];
 
-  String? _activeHighlightText;
-  int _highlightStartWordIndex = -1;
-  int _highlightEndWordIndex = -1;
+  List<({int start, int end})> _highlightRanges = [];
+
+  String? _initialHighlightText;
+  int _initialHighlightStartWordIndex = -1;
+  int _initialHighlightEndWordIndex = -1;
 
   ThemeColors get _colors => themeMap[_currentTheme]!;
+
+  StreamSubscription? _bookmarkSubscription;
 
   @override
   void initState() {
     super.initState();
-    // Menggunakan logika loading dan highlight dari versi remote
-    _activeHighlightText = widget.highlightedTextToFind;
+    _initialHighlightText = widget.highlightedTextToFind;
     _loadArticleAndInitialize();
   }
 
   @override
   void dispose() {
-    _saveActiveHighlightToHistory();
+    _bookmarkSubscription?.cancel();
     super.dispose();
   }
 
-  // ================================
-  // ⚙️ FUNGSI UNTUK MENANGANI LOGIKA GAMBAR (Image Base64/Network)
-  // ================================
   Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
+    if (imagePath.isEmpty) {
+      return Container(
+        height: height,
+        color: AppColors.backgroundLight,
+        child: const Center(
+          child: Text(
+            'Cover Image Placeholder',
+            style: TextStyle(color: AppColors.darkGrey),
+          ),
+        ),
+      );
+    }
+
     bool isNetworkUrl =
         imagePath.startsWith('http://') || imagePath.startsWith('https://');
-    bool isBase64Data = imagePath.length > 100 && !isNetworkUrl;
-
-    Widget imageWidget;
-
-    // Placeholder default
-    Widget defaultPlaceholder = Container(
-      height: height,
-      color: AppColors.backgroundLight,
-      child: const Center(
-        child: Text(
-          'Cover Image Placeholder',
-          style: TextStyle(color: AppColors.darkGrey),
-        ),
-      ),
-    );
 
     if (isNetworkUrl) {
-      imageWidget = Image.network(
+      return Image.network(
         imagePath,
         width: width,
         height: height,
@@ -157,34 +160,42 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
           );
         },
       );
-    } else if (isBase64Data) {
+    } else {
+
       try {
         String base64String = imagePath.contains(',')
-            ? imagePath.split(',').last
+            ? imagePath
+                  .split(',')
+                  .last 
             : imagePath;
 
         Uint8List imageBytes = base64Decode(base64String);
 
-        imageWidget = Image.memory(
+        return Image.memory(
           imageBytes,
           width: width,
           height: height,
           fit: BoxFit.cover,
         );
       } catch (e) {
+   
         debugPrint('Base64 Decode Error in Reading Screen: $e');
-        imageWidget = defaultPlaceholder; // Pakai placeholder jika error Base64
+        return Container(
+          height: height,
+          color: AppColors.backgroundLight,
+          child: const Center(
+            child: Text(
+              'Gagal memuat gambar (Base64 Error)',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: AppColors.darkGrey),
+            ),
+          ),
+        );
       }
-    } else {
-      imageWidget =
-          defaultPlaceholder; // Pakai placeholder jika path kosong/invalid
     }
-    return imageWidget;
   }
-  // =========================================================
 
   String _cleanWord(String word) {
-    // Menghapus tanda baca umum di akhir kata dan mengubah ke huruf kecil
     return word.replaceAll(RegExp(r'[.,:;?!"]$'), '').toLowerCase();
   }
 
@@ -203,59 +214,82 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
         doc.id,
       );
 
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null && widget.highlightedTextToFind == null) {
-        final historyDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('readingHistory')
-            .doc(widget.articleId)
-            .get();
-
-        if (historyDoc.exists && historyDoc.data()?['lastHighlight'] != null) {
-          _activeHighlightText = historyDoc.data()!['lastHighlight'] as String?;
-        }
-      }
-
       _allArticleWords = _getAllWords(article);
       _totalPages = (_allArticleWords.length / _wordsPerPage).ceil();
+      if (_totalPages == 0) _totalPages = 1;
 
-      // Pindahkan _findHighlightAndNavigate ke sini untuk memastikan _totalPages terisi
-      _findHighlightAndNavigate();
+      _listenToBookmarks();
+
+     
+      _findInitialHighlightWordRange();
+
+   
+      if (_initialHighlightStartWordIndex != -1) {
+     
+        final int pageToNavigate =
+            (_initialHighlightStartWordIndex / _wordsPerPage).floor();
+        _currentPageIndex = pageToNavigate.clamp(0, _totalPages - 1);
+      } else if (widget.initialProgress > 0 && _totalPages > 0) {
+       
+        _currentPageIndex = ((widget.initialProgress * _totalPages) - 1)
+            .floor()
+            .clamp(0, _totalPages - 1);
+      }
+
+   
+      if (_currentPageIndex > 0) {
+        _saveReadingProgress(_currentPageIndex, _totalPages);
+      }
 
       if (mounted) {
         setState(() {
           _articleData = article;
           _isLoading = false;
-          // Pindah ke halaman terakhir yang dibaca jika ada progress awal
-          if (widget.initialProgress > 0 && widget.initialProgress < 1.0) {
-            _currentPageIndex = ((widget.initialProgress * _totalPages) - 1)
-                .round()
-                .clamp(0, _totalPages - 1);
-          }
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to load article: $e';
+          _errorMessage = 'Failed to load article: ' + e.toString();
           _isLoading = false;
         });
       }
     }
   }
 
-  Future<void> _saveActiveHighlightToHistory() async {
+  void _listenToBookmarks() {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || _activeHighlightText == null) return;
+    if (user == null) return;
 
-    await FirebaseFirestore.instance
+    _bookmarkSubscription = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
-        .collection('readingHistory')
-        .doc(widget.articleId)
-        .set({'lastHighlight': _activeHighlightText}, SetOptions(merge: true));
+        .collection('bookmarks')
+        .where('articleId', isEqualTo: widget.articleId)
+        .snapshots()
+        .listen((snapshot) {
+          final List<String> texts = snapshot.docs
+              .map((doc) => doc.data()['highlightedText'] as String)
+              .toList();
+
+          final List<({int start, int end})> newRanges = [];
+
+          for (final text in texts) {
+            final range = _findWordRange(text);
+            if (range.start != -1) {
+              newRanges.add(range);
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              _highlightRanges = newRanges;
+            });
+          }
+        });
   }
+
+  Future<void> _saveActiveHighlightToHistory() async {}
 
   Future<void> _markAsFinishedAndPop() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -265,10 +299,21 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
           content: Text('Anda harus login untuk menyimpan progres bacaan.'),
         ),
       );
+
+      Navigator.pop(context);
       return;
     }
 
-    await FirebaseFirestore.instance
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Yeyy selesai membaca artikel ini!'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    Navigator.pop(context);
+
+    FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .collection('readingHistory')
@@ -280,16 +325,10 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
           'author': widget.articleAuthor,
           'imagePath': widget.imagePath,
           'savedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Selesai membaca artikel ini! Progress disimpan.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    Navigator.pop(context);
+        }, SetOptions(merge: true))
+        .catchError((error) {
+          debugPrint('Error saving final progress: $error');
+        });
   }
 
   Future<void> _saveBookmark(String selectedText) async {
@@ -318,13 +357,9 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
             'articleTitle': widget.articleTitle,
             'articleAuthor': widget.articleAuthor,
             'highlightedText': selectedText,
+            'author': widget.articleAuthor,
             'createdAt': FieldValue.serverTimestamp(),
           });
-
-      setState(() {
-        _activeHighlightText = selectedText;
-        _findHighlightAndNavigate();
-      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -336,7 +371,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal menyimpan bookmark: $e'),
+          content: Text('Gagal menyimpan bookmark: ' + e.toString()),
           duration: const Duration(seconds: 3),
           backgroundColor: Colors.red,
         ),
@@ -344,56 +379,49 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
     }
   }
 
-  void _findHighlightAndNavigate() {
-    if (_activeHighlightText != null && _allArticleWords.isNotEmpty) {
-      final String highlight = _activeHighlightText!.trim();
-      final List<String> highlightWords = highlight.split(RegExp(r'\s+'));
+  ({int start, int end}) _findWordRange(String highlight) {
+    if (_allArticleWords.isEmpty) return (start: -1, end: -1);
 
-      bool highlightFound = false;
+    final String trimmedHighlight = highlight.trim();
 
-      if (highlightWords.isNotEmpty) {
-        final String cleanFirstHighlightWord = _cleanWord(highlightWords[0]);
+    final List<String> highlightWords = trimmedHighlight
+        .split(RegExp(r'\s+'))
+        .where((s) => s.isNotEmpty)
+        .toList();
 
-        for (int i = 0; i < _allArticleWords.length; i++) {
-          if (_cleanWord(_allArticleWords[i]) == cleanFirstHighlightWord) {
-            bool match = true;
-            for (int j = 1; j < highlightWords.length; j++) {
-              final String cleanArticleWord = i + j < _allArticleWords.length
-                  ? _cleanWord(_allArticleWords[i + j])
-                  : '';
+    if (highlightWords.isEmpty) return (start: -1, end: -1);
 
-              if (i + j >= _allArticleWords.length ||
-                  cleanArticleWord != _cleanWord(highlightWords[j])) {
-                match = false;
-                break;
-              }
-            }
+    final String cleanFirstHighlightWord = _cleanWord(highlightWords[0]);
 
-            if (match) {
-              _highlightStartWordIndex = i;
-              _highlightEndWordIndex = i + highlightWords.length;
-              highlightFound = true;
+    for (int i = 0; i < _allArticleWords.length; i++) {
+      if (_cleanWord(_allArticleWords[i]) == cleanFirstHighlightWord) {
+        bool match = true;
+        for (int j = 1; j < highlightWords.length; j++) {
+          final String cleanArticleWord = i + j < _allArticleWords.length
+              ? _cleanWord(_allArticleWords[i + j])
+              : '';
 
-              final int pageToNavigate =
-                  (_highlightStartWordIndex / _wordsPerPage).floor();
-
-              if (_currentPageIndex != pageToNavigate) {
-                // Jangan panggil setState di sini. Biarkan _buildArticleContent yang mengatur.
-                _currentPageIndex = pageToNavigate.clamp(0, _totalPages - 1);
-              }
-              break;
-            }
+          if (i + j >= _allArticleWords.length ||
+              cleanArticleWord != _cleanWord(highlightWords[j])) {
+            match = false;
+            break;
           }
         }
-      }
 
-      if (!highlightFound) {
-        _highlightStartWordIndex = -1;
-        _highlightEndWordIndex = -1;
+        if (match) {
+          return (start: i, end: i + highlightWords.length);
+        }
       }
-    } else {
-      _highlightStartWordIndex = -1;
-      _highlightEndWordIndex = -1;
+    }
+    return (start: -1, end: -1);
+  }
+
+  void _findInitialHighlightWordRange() {
+    if (_initialHighlightText != null && _allArticleWords.isNotEmpty) {
+      final range = _findWordRange(_initialHighlightText!);
+
+      _initialHighlightStartWordIndex = range.start;
+      _initialHighlightEndWordIndex = range.end;
     }
   }
 
@@ -414,6 +442,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
     if (newIndex >= 0 && newIndex < _totalPages) {
       setState(() {
         _currentPageIndex = newIndex;
+ 
         _saveReadingProgress(newIndex, _totalPages);
       });
     }
@@ -425,7 +454,8 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
 
     if (totalPages > 0) {
       final double progress = (currentPage + 1) / totalPages;
-      await FirebaseFirestore.instance
+
+      FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('readingHistory')
@@ -436,7 +466,10 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
             'title': widget.articleTitle,
             'author': widget.articleAuthor,
             'imagePath': widget.imagePath,
-          }, SetOptions(merge: true));
+          }, SetOptions(merge: true))
+          .catchError((error) {
+            debugPrint('Error saving progress on page change: $error');
+          });
     }
   }
 
@@ -498,19 +531,26 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
 
   List<String> _getAllWords(Article article) {
     String fullContent = '';
+    final unescape = HtmlUnescape();
 
     for (var section in article.sections) {
-      fullContent += (section['sectionTitle'] ?? '') + ' ';
+      String rawContent = '';
 
       final content = section['paragraphs'] ?? section['content'] ?? '';
       if (content is List) {
-        fullContent += content.join(' ') + ' ';
+        rawContent += content.join(' ') + ' ';
       } else {
-        fullContent += content.toString() + ' ';
+        rawContent += content.toString() + ' ';
       }
+
+      String unescaped = unescape.convert(rawContent);
+
+      String plainText = parse(unescaped).documentElement!.text;
+
+      fullContent += plainText + ' ';
     }
 
-    return fullContent.trim().split(RegExp(r'\s+'));
+    return fullContent.trim().replaceAll(RegExp(r'\s+'), ' ').split(' ');
   }
 
   Widget _customContextMenuBuilder(
@@ -557,35 +597,31 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
   ) {
     List<TextSpan> spans = [];
 
-    if (_highlightStartWordIndex == -1) {
-      for (final word in words) {
-        spans.add(
-          TextSpan(
-            text: '$word ',
-            style: TextStyle(color: _colors.text, fontSize: 16, height: 1.6),
-          ),
-        );
-      }
-      return spans;
-    }
-
     Color highlightColor = AppColors.primaryBlue.withOpacity(0.4);
+    Color initialHighlightColor = Colors.yellow.withOpacity(0.6);
 
     for (int i = 0; i < words.length; i++) {
       final int wordGlobalIndex = pageStartIndex + i;
       final String word = words[i];
 
-      final bool isHighlighted =
-          wordGlobalIndex >= _highlightStartWordIndex &&
-          wordGlobalIndex < _highlightEndWordIndex;
+      bool isPermanentHighlighted = _highlightRanges.any(
+        (range) =>
+            wordGlobalIndex >= range.start && wordGlobalIndex < range.end,
+      );
+
+      bool isInitialHighlighted =
+          wordGlobalIndex >= _initialHighlightStartWordIndex &&
+          wordGlobalIndex < _initialHighlightEndWordIndex;
 
       spans.add(
         TextSpan(
           text: '$word ',
           style: TextStyle(
-            backgroundColor: isHighlighted
-                ? highlightColor
-                : Colors.transparent,
+            backgroundColor: isInitialHighlighted
+                ? initialHighlightColor
+                : (isPermanentHighlighted
+                      ? highlightColor
+                      : Colors.transparent),
             color: _colors.text,
             fontSize: 16,
             height: 1.6,
@@ -597,15 +633,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
   }
 
   Widget _buildArticleContent(Article article) {
-    // Di sini _allArticleWords sudah terisi dari _loadArticleAndInitialize
     final int totalWords = _allArticleWords.length;
-
-    // Hitung total halaman (ini seharusnya sudah dilakukan di _loadArticleAndInitialize)
-    // Kita pastikan _totalPages disinkronisasi di sini jika ada perubahan
-    final int calculatedTotalPages = (totalWords / _wordsPerPage).ceil();
-    if (calculatedTotalPages != _totalPages) {
-      _totalPages = calculatedTotalPages;
-    }
 
     final int startIndex = _currentPageIndex * _wordsPerPage;
     final int endIndex = ((_currentPageIndex + 1) * _wordsPerPage).clamp(
@@ -650,7 +678,6 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8.0),
-                      // 👇 MENGGUNAKAN FUNGSI IMAGE BARU
                       child: _buildArticleImage(
                         article.imagePath,
                         width: double.infinity,
@@ -690,7 +717,6 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                 ] else ...[
                   const SizedBox(height: 10),
                 ],
-
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20.0,
@@ -746,19 +772,19 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                 : () => _goToPage(_currentPageIndex - 1),
             icon: Icon(
               Icons.arrow_back,
-              color: isFirstPage ? AppColors.darkGrey : AppColors.black,
+              color: isFirstPage ? AppColors.darkGrey : _colors.icon,
             ),
             label: Text(
               'Previous',
               style: TextStyle(
-                color: isFirstPage ? AppColors.darkGrey : AppColors.black,
+                color: isFirstPage ? AppColors.darkGrey : _colors.text,
               ),
             ),
             style: OutlinedButton.styleFrom(
               side: BorderSide(
                 color: isFirstPage
                     ? AppColors.darkGrey.withOpacity(0.5)
-                    : AppColors.black,
+                    : _colors.text,
               ),
             ),
           ),
@@ -809,6 +835,7 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: _colors.icon),
           onPressed: () {
+          
             Navigator.pop(context);
           },
         ),
@@ -821,12 +848,6 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
                   : _colors.icon,
             ),
             onPressed: _toggleThemeSelector,
-          ),
-          IconButton(
-            icon: Icon(Icons.menu_book, color: _colors.icon),
-            onPressed: () {
-              // Tambahkan logika untuk membuka menu bookmark/highlight
-            },
           ),
         ],
       ),
@@ -844,7 +865,6 @@ class _ArticleReadingScreenState extends State<ArticleReadingScreen> {
           Expanded(
             child: Stack(
               children: [
-                // Menggunakan _articleData yang dimuat di initState (Remote)
                 if (_isLoading)
                   const Center(child: CircularProgressIndicator())
                 else if (_errorMessage != null)
