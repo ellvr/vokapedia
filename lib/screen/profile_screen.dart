@@ -1,4 +1,4 @@
-// ignore_for_file: empty_catches, use_build_context_synchronously
+// ignore_for_file: empty_catches, use_build_context_synchronously, deprecated_member_use
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,6 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _userName = 'Nama Pengguna';
   String _userEmail = 'email tidak tersedia';
   String? _userPhotoUrl;
+  List<String> _userInterests = [];
   final User? user = FirebaseAuth.instance.currentUser;
 
   @override
@@ -33,35 +34,137 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadUserProfileData() async {
     if (user == null) return;
 
-    String? name;
-    String? photoUrl = user!.photoURL;
-    String email = user!.email ?? 'email tidak tersedia';
+    try {
+      DocumentSnapshot snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .get();
 
-    name = user!.displayName;
-
-    if (name == null || name.isEmpty) {
-      try {
-        DocumentSnapshot snap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user!.uid)
-            .get();
-        if (snap.exists && (snap.data() as Map).containsKey('name')) {
-          name = snap['name'];
+      if (snap.exists) {
+        Map<String, dynamic> data = snap.data() as Map<String, dynamic>;
+        if (mounted) {
+          setState(() {
+            _userName = data['name'] ?? user!.displayName ?? 'Nama Pengguna';
+            _userEmail = user!.email ?? 'email tidak tersedia';
+            _userPhotoUrl = user!.photoURL;
+            _userInterests = List<String>.from(data['interests'] ?? []);
+          });
         }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
+  }
 
-    if (mounted) {
-      setState(() {
-        _userPhotoUrl = photoUrl;
-        _userEmail = email;
-        _userName =
-            name ??
-            (user!.email != null
-                ? user!.email!.split('@')[0]
-                : 'Nama Pengguna');
-      });
-    }
+  void _showInterestDialog() {
+    List<String> tempSelected = List.from(_userInterests);
+    final List<String> categories = [
+      "Materi Belajar",
+      "Sastra",
+      "Artikel Populer",
+      "Artikel Ilmiah",
+    ];
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                "Atur Minat Baca",
+                style: TextStyle(
+                  fontFamily: 'PlayfairDisplay',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Pilih topik favoritmu untuk personalisasi rekomendasi artikel.",
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 15),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categories.map((cat) {
+                      final isSel = tempSelected.contains(cat);
+                      return FilterChip(
+                        label: Text(cat),
+                        selected: isSel,
+                        onSelected: (val) {
+                          setDialogState(() {
+                            val
+                                ? tempSelected.add(cat)
+                                : tempSelected.remove(cat);
+                          });
+                        },
+                        backgroundColor: Colors.white,
+                        selectedColor: AppColors.primaryBlue.withOpacity(0.2),
+                        checkmarkColor: AppColors.primaryBlue,
+                        shape: StadiumBorder(
+                          side: BorderSide(
+                            color: isSel
+                                ? AppColors.primaryBlue
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                        labelStyle: TextStyle(
+                          color: isSel ? AppColors.primaryBlue : Colors.black87,
+                          fontSize: 12,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    "Batal",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () async {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user!.uid)
+                        .update({
+                          'interests': tempSelected,
+                          'hasSetInterests': true,
+                        });
+                    if (mounted) {
+                      setState(() {
+                        _userInterests = tempSelected;
+                      });
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: const Text(
+                    "Simpan",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -118,6 +221,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String subtitle,
     required IconData icon,
     VoidCallback? onTap,
+    Color? iconColor,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -140,7 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(right: 12.0, left: 4.0),
-                  child: Icon(icon, color: AppColors.black),
+                  child: Icon(icon, color: iconColor ?? AppColors.black),
                 ),
                 Expanded(
                   child: Column(
@@ -272,6 +376,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
+                    "Personalisasi",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildSettingTile(
+                    title: "Atur Minat Baca",
+                    subtitle: "Sesuaikan topik artikel favoritmu",
+                    icon: Icons.favorite,
+                    iconColor: AppColors.black,
+                    onTap: _showInterestDialog,
+                  ),
+                  const SizedBox(height: 15),
+                  const Text(
                     "Pengaturan Akun",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
@@ -322,9 +439,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const FAQScreen(),
-                        ),
+                        MaterialPageRoute(builder: (_) => const FAQScreen()),
                       );
                     },
                   ),

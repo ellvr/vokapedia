@@ -16,15 +16,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController nameC = TextEditingController();
   final TextEditingController emailC = TextEditingController();
   final TextEditingController passC = TextEditingController();
-  final TextEditingController confirmPassC =
-      TextEditingController();  
+  final TextEditingController confirmPassC = TextEditingController();
 
   final List<String> availableClasses = ['10', '11', '12'];
   String? selectedClass;
 
   bool isLoading = false;
   bool _isPassVisible = false;
-  bool _isConfirmPassVisible = false; 
+  bool _isConfirmPassVisible = false;
 
   @override
   void dispose() {
@@ -59,7 +58,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           content: Text("Semua field wajib diisi, termasuk kelas."),
           backgroundColor: Colors.red,
         ),
-        
       );
       return;
     }
@@ -90,7 +88,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         "email": emailC.text,
         "role": "siswa",
         "kelas": selectedClass,
-        "createdAt": DateTime.now(),
+        "interests": [],
+        "hasSetInterests": false,
+        "createdAt": FieldValue.serverTimestamp(),
       });
 
       setState(() => isLoading = false);
@@ -136,7 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       floatingLabelBehavior: FloatingLabelBehavior.never,
       filled: true,
       fillColor: Colors.grey.shade100,
-      contentPadding: const EdgeInsets.only(right: 16, left: 16, top: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(50),
         borderSide: BorderSide.none,
@@ -174,19 +174,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           children: [
-
             const Center(
               child: Text(
                 "VokaPedia",
@@ -204,45 +200,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
               style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
             ),
             const SizedBox(height: 30),
-
             TextField(
               controller: nameC,
               decoration: _getInputDecoration("Nama Lengkap"),
             ),
             const SizedBox(height: 16),
-
             TextField(
               controller: emailC,
               decoration: _getInputDecoration("Email"),
             ),
             const SizedBox(height: 16),
-
             _buildPasswordField(
               controller: passC,
               label: "Password",
               isVisible: _isPassVisible,
-              toggleVisibility: (newValue) {
-                setState(() {
-                  _isPassVisible = newValue;
-                });
-              },
+              toggleVisibility: (val) => setState(() => _isPassVisible = val),
             ),
             const SizedBox(height: 16),
-
             _buildPasswordField(
               controller: confirmPassC,
               label: "Konfirmasi Password",
               isVisible: _isConfirmPassVisible,
-              toggleVisibility: (newValue) {
-                setState(() {
-                  _isConfirmPassVisible = newValue;
-                });
-              },
+              toggleVisibility: (val) =>
+                  setState(() => _isConfirmPassVisible = val),
             ),
             const SizedBox(height: 16),
-
             DropdownButtonFormField<String>(
-              initialValue: selectedClass,
               decoration: _getInputDecoration("Pilih Kelas"),
               hint: const Text("Pilih Kelas Anda"),
               items: availableClasses.map((String value) {
@@ -251,27 +234,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Text('Kelas ${_mapToRoman(value)}'),
                 );
               }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  selectedClass = newValue;
-                });
-              },
+              onChanged: (val) => setState(() => selectedClass = val),
             ),
             const SizedBox(height: 30),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: isLoading ? null : registerUser,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(50),
                   ),
                 ),
                 child: isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
                     : const Text(
                         "Daftar",
                         style: TextStyle(fontSize: 16, color: Colors.white),
@@ -279,15 +264,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
             const SizedBox(height: 40),
-
             Center(
               child: GestureDetector(
-                onTap: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  );
-                },
+                onTap: () => Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                ),
                 child: RichText(
                   text: TextSpan(
                     text: "Sudah punya akun? ",

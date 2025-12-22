@@ -1,11 +1,13 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: use_build_context_synchronously, curly_braces_in_flow_control_structures, deprecated_member_use
 
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:vokapedia/screen/all_quizzes_screen.dart';
+import 'package:vokapedia/screen/quiz_play_screen.dart';
 import 'package:vokapedia/models/article_model.dart';
+import 'package:vokapedia/models/quiz_model.dart';
 import 'package:vokapedia/screen/article_detail_screen.dart';
 import 'package:vokapedia/screen/bookmark_screen.dart';
 import 'package:vokapedia/screen/library_screen.dart';
@@ -13,10 +15,6 @@ import 'package:vokapedia/screen/profile_screen.dart';
 import 'package:vokapedia/screen/searchh_screen.dart';
 import '../widget/custom_bottom_navbar.dart';
 import '../utils/color_constants.dart';
-import 'package:rxdart/rxdart.dart';
-
-const double _paddingHorizontal = 15.0;
-const double _spacingVertical = 15.0;
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
@@ -35,169 +33,692 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _userName = 'Pengguna';
   String? _userPhotoUrl;
-  String? _currentUserClass;
-
-  List<Article> _featuredArticles = [];
-  bool _isFeaturedLoading = true;
+  List<String> _userInterests = [];
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    _loadUserData();
-    _loadFeaturedArticles();
+    _listenUserData();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _pageNotifier.dispose();
     super.dispose();
   }
 
-  Future<void> _loadUserData() async {
+  void _listenUserData() {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      String? name;
-      String? photoUrl;
-      String? userClass;
-
-      name = user.displayName;
-      photoUrl = user.photoURL;
-
-      try {
-        DocumentSnapshot snap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        if (snap.exists && (snap.data() as Map).containsKey('name')) {
-          name = snap['name'];
-        }
-        if (snap.exists && (snap.data() as Map).containsKey('kelas')) {
-          userClass = snap['kelas'];
-        }
-      } catch (_) {}
-
-      if (mounted) {
-        setState(() {
-          if (name != null && name.isNotEmpty) {
-            _userName = name.split(' ')[0];
-          } else if (user.email != null) {
-            _userName = user.email!.split('@')[0];
-          } else {
-            _userName = 'Pengguna';
-          }
-          _userPhotoUrl = photoUrl;
-          _currentUserClass = userClass;
-        });
-      }
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots()
+          .listen((snap) {
+            if (snap.exists && mounted) {
+              Map<String, dynamic> data = snap.data() as Map<String, dynamic>;
+              bool hasSetInterests = data['hasSetInterests'] ?? false;
+              setState(() {
+                _userName = data['name']?.split(' ')[0] ?? 'Pengguna';
+                _userPhotoUrl = user.photoURL;
+                _userInterests = List<String>.from(data['interests'] ?? []);
+              });
+              if (!hasSetInterests) {
+                Future.delayed(const Duration(seconds: 2), () {
+                  if (mounted) _showInterestDialog();
+                });
+              }
+            }
+          });
     }
   }
 
-  Future<void> _loadFeaturedArticles() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('articles')
-          .where('isFeatured', isEqualTo: true)
-          .get();
-
-      final data = snapshot.docs
-          .map((doc) => Article.fromFirestore(doc.data(), doc.id))
-          .toList();
-
-      if (mounted) {
-        setState(() {
-          _featuredArticles = data;
-          _isFeaturedLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading featured articles: $e');
-      if (mounted) {
-        setState(() {
-          _isFeaturedLoading = false;
-        });
-      }
-    }
+  void _showInterestDialog() {
+    List<String> tempSelected = List.from(_userInterests);
+    final List<String> categories = [
+      "Materi Belajar",
+      "Sastra",
+      "Artikel Populer",
+      "Artikel Ilmiah",
+    ];
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                "Apa minatmu?",
+                style: TextStyle(
+                  fontFamily: 'PlayfairDisplay',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Pilih topik favoritmu untuk rekomendasi terbaik.",
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 15),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categories.map((cat) {
+                      final isSel = tempSelected.contains(cat);
+                      return FilterChip(
+                        label: Text(cat),
+                        selected: isSel,
+                        onSelected: (val) {
+                          setDialogState(() {
+                            val
+                                ? tempSelected.add(cat)
+                                : tempSelected.remove(cat);
+                          });
+                        },
+                        backgroundColor: Colors.white,
+                        selectedColor: AppColors.primaryBlue.withOpacity(0.2),
+                        checkmarkColor: AppColors.primaryBlue,
+                        shape: StadiumBorder(
+                          side: BorderSide(
+                            color: isSel
+                                ? AppColors.primaryBlue
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                        labelStyle: TextStyle(
+                          color: isSel ? AppColors.primaryBlue : Colors.black87,
+                          fontSize: 12,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user!.uid)
+                        .update({'hasSetInterests': true});
+                    Navigator.pop(context);
+                  },
+                  child: const Text(
+                    "Nanti saja",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user!.uid)
+                        .update({
+                          'interests': tempSelected,
+                          'hasSetInterests': true,
+                        });
+                    Navigator.pop(context);
+                  },
+                  child: const Text(
+                    "Simpan",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
-  Stream<List<Article>> _getRecommendedArticlesStream(String userClass) {
-    final userRole = widget.userRole;
+  Stream<List<Quiz>> _getActiveQuizzesStream() {
+    return FirebaseFirestore.instance
+        .collection('quizzes')
+        .where('isPublished', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(2)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((doc) => Quiz.fromFirestore(doc.data(), doc.id))
+              .toList(),
+        );
+  }
 
-    if (userRole == 'admin') {
+  Stream<List<Article>> _getTopPicksStream() {
+    if (_userInterests.isEmpty) {
       return FirebaseFirestore.instance
           .collection('articles')
+          .limit(10)
           .snapshots()
           .map(
-            (snapshot) => snapshot.docs
+            (snap) => snap.docs
                 .map((doc) => Article.fromFirestore(doc.data(), doc.id))
                 .toList(),
           );
     } else {
-      String classFilter;
-      if (userClass == '10') {
-        classFilter = 'Kelas X';
-      } else if (userClass == '11') {
-        classFilter = 'Kelas XI';
-      } else if (userClass == '12') {
-        classFilter = 'Kelas XII';
-      } else {
-        return Stream.value([]);
-      }
-
-      final streamSpecific = FirebaseFirestore.instance
+      return FirebaseFirestore.instance
           .collection('articles')
-          .where('kelas', isEqualTo: classFilter)
+          .where('topic', whereIn: _userInterests)
           .snapshots()
           .map(
-            (snapshot) => snapshot.docs
+            (snap) => snap.docs
                 .map((doc) => Article.fromFirestore(doc.data(), doc.id))
                 .toList(),
           );
-
-      final streamGeneral = FirebaseFirestore.instance
-          .collection('articles')
-          .where('kelas', isEqualTo: 'Umum')
-          .snapshots()
-          .map(
-            (snapshot) => snapshot.docs
-                .map((doc) => Article.fromFirestore(doc.data(), doc.id))
-                .toList(),
-          );
-
-      return Rx.combineLatest2(streamSpecific, streamGeneral, (
-        List<Article> specific,
-        List<Article> general,
-      ) {
-        final combined = [...specific, ...general];
-
-        final uniqueArticles = <String, Article>{};
-        for (var article in combined) {
-          uniqueArticles[article.id] = article;
-        }
-        return uniqueArticles.values.toList();
-      });
     }
   }
 
   Stream<List<Article>> _getContinueReadingStream() {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return Stream.value([]);
-    }
-
+    if (user == null) return Stream.value([]);
     return FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .collection('readingHistory')
         .where('readingProgress', isLessThan: 1.0)
-        .orderBy('readingProgress')
         .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            final data = doc.data();
-            return Article.fromFirestore(data, doc.id);
-          }).toList();
-        });
+        .map(
+          (snap) => snap.docs
+              .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+              .toList(),
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isHome = _currentIndex == 0;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: isHome ? _buildHomeAppBar() : null,
+      body: isHome ? _buildHomeBody(context) : _screens[_currentIndex],
+      bottomNavigationBar: CustomBottomNavBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+      ),
+    );
+  }
+
+  AppBar _buildHomeAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      surfaceTintColor: Colors.white,
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Halo $_userName!',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Siap baca apa hari ini?',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            InkWell(
+              onTap: () => setState(() => _currentIndex = 4),
+              borderRadius: BorderRadius.circular(22),
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: AppColors.softBlue,
+                backgroundImage: _userPhotoUrl != null
+                    ? NetworkImage(_userPhotoUrl!)
+                    : null,
+                child: _userPhotoUrl == null
+                    ? const Icon(Icons.person, color: AppColors.primaryBlue)
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeBody(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 20),
+            _buildFeaturedContent(),
+            _buildQuizSection(),
+            _buildSectionTitle(title: 'Top picks for you', showSeeAll: true),
+            _buildHorizontalArticles(stream: _getTopPicksStream()),
+            _buildSectionTitle(title: 'Continue reading', showSeeAll: false),
+            _buildHorizontalArticles(stream: _getContinueReadingStream()),
+            const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeaturedContent() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('articles')
+          .where('isFeatured', isEqualTo: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting)
+          return const SizedBox(
+            height: 160,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+        final featuredList = docs
+            .map(
+              (doc) => Article.fromFirestore(
+                doc.data() as Map<String, dynamic>,
+                doc.id,
+              ),
+            )
+            .toList();
+        return Column(
+          children: [
+            SizedBox(
+              height: 160,
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: featuredList.length,
+                onPageChanged: (i) => _pageNotifier.value = i,
+                itemBuilder: (context, index) {
+                  final item = featuredList[index];
+                  return GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ArticleDetailScreen(articleId: item.id),
+                      ),
+                    ),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _buildArticleImage(item.imagePath),
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    Colors.black.withOpacity(0.8),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 15,
+                              left: 15,
+                              right: 15,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                 
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    item.title,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+            ValueListenableBuilder<int>(
+              valueListenable: _pageNotifier,
+              builder: (context, value, _) => _DotIndicator(
+                count: featuredList.length,
+                currentIndex: value,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildQuizSection() {
+    final user = FirebaseAuth.instance.currentUser;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(title: 'Latihan Kuis', showSeeAll: true),
+        StreamBuilder<List<Quiz>>(
+          stream: _getActiveQuizzesStream(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting)
+              return const Center(child: CircularProgressIndicator());
+            final quizzes = snapshot.data ?? [];
+            if (quizzes.isEmpty)
+              return const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  "Tidak ada kuis aktif.",
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              );
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: quizzes.length,
+              itemBuilder: (context, index) {
+                final quiz = quizzes[index];
+                bool isOverdue = DateTime.now().isAfter(quiz.deadline);
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('quiz_submissions')
+                      .where('quizID', isEqualTo: quiz.id)
+                      .where('studentID', isEqualTo: user?.uid)
+                      .snapshots(),
+                  builder: (context, subSnap) {
+                    bool isAnswered =
+                        subSnap.hasData && subSnap.data!.docs.isNotEmpty;
+                    String statusLabel = isAnswered
+                        ? "Selesai"
+                        : (isOverdue ? "Terlambat" : "Ditugaskan");
+                    Color statusColor = isAnswered
+                        ? Colors.green
+                        : (isOverdue ? Colors.red : AppColors.primaryBlue);
+                    return GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => QuizPlayScreen(quiz: quiz),
+                        ),
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.grey.shade200),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              height: 50,
+                              width: 50,
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                Icons.assignment_outlined,
+                                color: statusColor,
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    quiz.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.timer_outlined,
+                                        size: 12,
+                                        color: isOverdue && !isAnswered
+                                            ? Colors.red
+                                            : Colors.grey,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isAnswered
+                                            ? "Sudah dikerjakan"
+                                            : "Deadline: ${quiz.deadline.day}/${quiz.deadline.month}",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isOverdue && !isAnswered
+                                              ? Colors.red
+                                              : Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHorizontalArticles({required Stream<List<Article>> stream}) {
+    return SizedBox(
+      height: 220,
+      child: StreamBuilder<List<Article>>(
+        stream: stream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting)
+            return const Center(child: CircularProgressIndicator());
+          final articles = snapshot.data ?? [];
+          if (articles.isEmpty)
+            return const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                "Belum ada artikel",
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            );
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            itemCount: articles.length,
+            itemBuilder: (context, index) =>
+                _buildContentCard(item: articles[index]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildContentCard({required Article item}) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ArticleDetailScreen(articleId: item.id),
+        ),
+      ),
+      child: Container(
+        width: 150,
+        margin: const EdgeInsets.only(right: 15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                height: 150,
+                width: 150,
+                color: AppColors.softBlue,
+                child: _buildArticleImage(item.imagePath),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'PlayfairDisplay',
+              ),
+            ),
+            Text(
+              item.author,
+              style: const TextStyle(fontSize: 11, color: AppColors.darkGrey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArticleImage(String imagePath) {
+    if (imagePath.isEmpty) return const Icon(Icons.image_not_supported);
+    if (imagePath.startsWith('http'))
+      return Image.network(imagePath, fit: BoxFit.cover, gaplessPlayback: true);
+    try {
+      return Image.memory(
+        base64Decode(imagePath.split(',').last),
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+      );
+    } catch (e) {
+      return const Icon(Icons.error);
+    }
+  }
+
+  Widget _buildSectionTitle({required String title, bool showSeeAll = false}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'PlayfairDisplay',
+                ),
+              ),
+              if (title == 'Top picks for you')
+                IconButton(
+                  icon: const Icon(
+                    Icons.tune,
+                    size: 18,
+                    color: AppColors.primaryBlue,
+                  ),
+                  onPressed: () => _showInterestDialog(),
+                ),
+            ],
+          ),
+          if (showSeeAll)
+            GestureDetector(
+              onTap: () => title == 'Latihan Kuis'
+                  ? Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AllQuizzesScreen(),
+                      ),
+                    )
+                  : setState(() => _currentIndex = 1),
+              child: const Text(
+                'Lihat semua',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.primaryBlue,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   final List<Widget> _screens = [
@@ -207,482 +728,30 @@ class _HomeScreenState extends State<HomeScreen> {
     const BookmarkScreen(),
     const ProfileScreen(),
   ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-  }
-
-  Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
-    bool isNetworkUrl =
-        imagePath.startsWith('http://') || imagePath.startsWith('https://');
-    bool isBase64Data = imagePath.length > 100 && !isNetworkUrl;
-
-    Widget imageWidget;
-
-    if (isNetworkUrl) {
-      imageWidget = Image.network(
-        imagePath,
-        width: width,
-        height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            color: AppColors.backgroundLight,
-            child: const Center(
-              child: Icon(
-                Icons.broken_image,
-                size: 30,
-                color: AppColors.darkGrey,
-              ),
-            ),
-          );
-        },
-      );
-    } else if (isBase64Data) {
-      try {
-        String base64String = imagePath.contains(',')
-            ? imagePath.split(',').last
-            : imagePath;
-
-        Uint8List imageBytes = base64Decode(base64String);
-
-        imageWidget = Image.memory(
-          imageBytes,
-          width: width,
-          height: height,
-          fit: BoxFit.cover,
-        );
-      } catch (e) {
-        debugPrint('Base64 Decode Error in Home: $e');
-        imageWidget = Container(
-          color: AppColors.backgroundLight,
-          child: const Center(
-            child: Icon(
-              Icons.error_outline,
-              size: 30,
-              color: AppColors.darkGrey,
-            ),
-          ),
-        );
-      }
-    } else {
-      imageWidget = Container(
-        color: AppColors.backgroundLight,
-        child: const Center(
-          child: Icon(
-            Icons.image_not_supported,
-            size: 30,
-            color: AppColors.darkGrey,
-          ),
-        ),
-      );
-    }
-    return imageWidget;
-  }
-
-  Widget _buildHomeBody(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const SizedBox(height: 10),
-            _buildFeaturedContent(),
-            _buildSectionTitle(
-              title: widget.userRole == 'admin'
-                  ? 'All article'
-                  : 'Top picks for you',
-            ),
-
-            if (_currentUserClass == null && widget.userRole == 'siswa')
-              const SizedBox(
-                height: 210,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
-                  ),
-                ),
-              )
-            else
-              _buildArticlesList(
-                stream: _getRecommendedArticlesStream(_currentUserClass ?? ''),
-                height: 210,
-              ),
-            const SizedBox(height: 10),
-            _buildSectionTitle(title: 'Continue reading'),
-            _buildArticlesList(
-              stream: _getContinueReadingStream(),
-              height: 210,
-              isReadingList: true,
-            ),
-            const SizedBox(height: 30),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildArticlesList({
-    required Stream<List<Article>> stream,
-    required double height,
-    bool isReadingList = false,
-  }) {
-    return StreamBuilder<List<Article>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return SizedBox(
-            height: height,
-            child: const Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
-              ),
-            ),
-          );
-        }
-
-        if (snapshot.hasError) {
-          debugPrint('Stream Error: ${snapshot.error}');
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _paddingHorizontal),
-            child: Text(
-              'Error memuat data: ${snapshot.error}',
-              style: const TextStyle(color: Colors.red),
-            ),
-          );
-        }
-
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _paddingHorizontal),
-            child: Text(
-              isReadingList
-                  ? 'Semua artikel sudah dibaca. Yuk tambah librarymu!'
-                  : widget.userRole == 'admin'
-                  ? 'Belum ada artikel di database.'
-                  : 'Belum ada artikel yang sesuai dengan kelas Anda.',
-              style: const TextStyle(color: AppColors.darkGrey),
-            ),
-          );
-        }
-
-        final articles = snapshot.data!;
-
-        return SizedBox(
-          height: height,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: articles.length,
-            padding: const EdgeInsets.symmetric(horizontal: _paddingHorizontal),
-            itemBuilder: (context, index) {
-              final item = articles[index];
-              return Padding(
-                padding: const EdgeInsets.only(right: 15.0),
-                child: SizedBox(
-                  width: 150,
-                  child: _buildContentCard(
-                    item: item,
-                    isReadingList: isReadingList,
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isHome = _currentIndex == 0;
-
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      appBar: isHome ? _buildHomeAppBar() : null,
-      body: isHome ? _buildHomeBody(context) : _screens[_currentIndex],
-      bottomNavigationBar: CustomBottomNavBar(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
-      ),
-    );
-  }
-
-  AppBar _buildHomeAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 2.0,
-      shadowColor: AppColors.darkGrey.withOpacity(0.3),
-      toolbarHeight: 80,
-      surfaceTintColor: Colors.transparent,
-      scrolledUnderElevation: 2.0,
-      title: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: _paddingHorizontal),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Halo $_userName!',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.userRole == 'admin'
-                        ? 'Anda login sebagai Administrator.'
-                        : 'Siap eksplor bacaan baru untuk belajar?',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: _paddingHorizontal),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(24),
-              onTap: () {
-                setState(() {
-                  _currentIndex = 4;
-                });
-              },
-              child: CircleAvatar(
-                radius: 24,
-                backgroundColor: AppColors.backgroundLight,
-                backgroundImage:
-                    _userPhotoUrl != null && _userPhotoUrl!.isNotEmpty
-                    ? NetworkImage(_userPhotoUrl!)
-                    : null,
-                child: _userPhotoUrl == null || _userPhotoUrl!.isEmpty
-                    ? const Icon(Icons.person, color: AppColors.darkGrey)
-                    : null,
-              ),
-            ),
-          ),
-        ],
-      ),
-      automaticallyImplyLeading: false,
-    );
-  }
-
-  Widget _buildFeaturedContent() {
-    if (_isFeaturedLoading) {
-      return const SizedBox(
-        height: 150,
-        child: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.black),
-          ),
-        ),
-      );
-    }
-
-    if (_featuredArticles.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final featuredContent = _featuredArticles;
-
-    return Column(
-      children: <Widget>[
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 150,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: featuredContent.length,
-            onPageChanged: (index) {
-              _pageNotifier.value = index;
-            },
-            itemBuilder: (context, index) {
-              final item = featuredContent[index];
-              return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          ArticleDetailScreen(articleId: item.id),
-                    ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 20),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        _buildArticleImage(
-                          item.imagePath,
-                          width: double.infinity,
-                          height: double.infinity,
-                        ),
-
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            height: 60,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                                colors: [
-                                  Colors.black.withOpacity(0.9),
-                                  Colors.black.withOpacity(0.4),
-                                  Colors.black.withOpacity(0.0),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Teks Judul
-                        Positioned(
-                          bottom: 8,
-                          left: 12,
-                          right: 12,
-                          child: Text(
-                            item.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10.0),
-          child: ValueListenableBuilder<int>(
-            valueListenable: _pageNotifier,
-            builder: (context, value, _) {
-              return _DotIndicator(
-                count: featuredContent.length,
-                currentIndex: value,
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionTitle({required String title}) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        left: _paddingHorizontal,
-        right: _paddingHorizontal,
-        top: _spacingVertical,
-        bottom: _spacingVertical / 2,
-      ),
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  Widget _buildContentCard({
-    required Article item,
-    required bool isReadingList,
-  }) {
-    final double progress = item.readingProgress?.toDouble() ?? 0.0;
-    final int percentage = (progress * 100).toInt();
-
-    final String subtitleText = isReadingList && progress > 0
-        ? 'Progress: $percentage%'
-        : item.author;
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ArticleDetailScreen(articleId: item.id),
-          ),
-        );
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Container(
-            height: 150,
-            decoration: BoxDecoration(
-              color: AppColors.backgroundLight,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.darkGrey.withOpacity(0.3)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: _buildArticleImage(
-                item.imagePath,
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12),
-          ),
-          Text(
-            subtitleText,
-            style: const TextStyle(fontSize: 12, color: AppColors.darkGrey),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _DotIndicator extends StatelessWidget {
   final int count;
   final int currentIndex;
-
   const _DotIndicator({required this.count, required this.currentIndex});
-
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(count, (index) {
-        return Container(
-          width: 8.0,
-          height: 8.0,
-          margin: const EdgeInsets.symmetric(horizontal: 4.0),
+      children: List.generate(
+        count,
+        (index) => Container(
+          width: index == currentIndex ? 18 : 7,
+          height: 7,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            borderRadius: BorderRadius.circular(10),
             color: index == currentIndex
                 ? AppColors.primaryBlue
-                : AppColors.darkGrey.withOpacity(0.3),
+                : Colors.grey.withOpacity(0.3),
           ),
-        );
-      }),
+        ),
+      ),
     );
   }
 }

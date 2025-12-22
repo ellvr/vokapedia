@@ -19,6 +19,13 @@ class _SearchhScreenState extends State<SearchhScreen> {
   String searchText = "";
   final TextEditingController _controller = TextEditingController();
 
+  final List<String> categories = [
+    "Materi Belajar",
+    "Sastra",
+    "Artikel Populer",
+    "Artikel Ilmiah",
+  ];
+
   @override
   void dispose() {
     _controller.dispose();
@@ -28,23 +35,69 @@ class _SearchhScreenState extends State<SearchhScreen> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
+    if (difference.inDays > 7) return "${date.day}/${date.month}/${date.year}";
+    if (difference.inDays > 0) return "${difference.inDays} hari lalu";
+    if (difference.inHours > 0) return "${difference.inHours} jam lalu";
+    if (difference.inMinutes > 0) return "${difference.inMinutes} menit lalu";
+    return "Baru saja";
+  }
 
-    if (difference.inDays > 7) {
-      return "${date.day}/${date.month}/${date.year}";
-    } else if (difference.inDays > 0) {
-      return "${difference.inDays} hari lalu";
-    } else if (difference.inHours > 0) {
-      return "${difference.inHours} jam lalu";
-    } else if (difference.inMinutes > 0) {
-      return "${difference.inMinutes} menit lalu";
+  Widget _buildArticleImage(String imagePath) {
+    if (imagePath.isEmpty) {
+      return const Center(
+        child: Icon(Icons.image_not_supported, color: AppColors.darkGrey),
+      );
+    }
+
+    if (imagePath.startsWith('http')) {
+      return Image.network(
+        imagePath,
+        width: 84,
+        height: 108,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primaryBlue,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+      );
     } else {
-      return "Baru saja";
+      try {
+        String base64String = imagePath.contains(',')
+            ? imagePath.split(',').last
+            : imagePath;
+        Uint8List imageBytes = base64Decode(base64String);
+        return Image.memory(
+          imageBytes,
+          width: 84,
+          height: 108,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported),
+        );
+      } catch (e) {
+        return const Icon(Icons.error_outline);
+      }
     }
   }
 
-  InlineSpan highlightText(String text, String query) {
+  InlineSpan highlightText(String text, String query, TextStyle baseStyle) {
     final lower = text.toLowerCase();
     final q = query.toLowerCase();
+
+    if (q.isEmpty) {
+      return TextSpan(text: text, style: baseStyle);
+    }
 
     List<InlineSpan> spans = [];
     int start = 0;
@@ -53,13 +106,9 @@ class _SearchhScreenState extends State<SearchhScreen> {
     while ((index = lower.indexOf(q, start)) != -1) {
       if (index > start) {
         spans.add(
-          TextSpan(
-            text: text.substring(start, index),
-            style: const TextStyle(color: AppColors.black),
-          ),
+          TextSpan(text: text.substring(start, index), style: baseStyle),
         );
       }
-
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
@@ -72,7 +121,7 @@ class _SearchhScreenState extends State<SearchhScreen> {
             ),
             child: Text(
               text.substring(index, index + q.length),
-              style: const TextStyle(
+              style: baseStyle.copyWith(
                 color: AppColors.primaryBlue,
                 fontWeight: FontWeight.bold,
               ),
@@ -80,43 +129,12 @@ class _SearchhScreenState extends State<SearchhScreen> {
           ),
         ),
       );
-
       start = index + q.length;
     }
-
     if (start < text.length) {
-      spans.add(
-        TextSpan(
-          text: text.substring(start),
-          style: const TextStyle(color: AppColors.black),
-        ),
-      );
+      spans.add(TextSpan(text: text.substring(start), style: baseStyle));
     }
-
     return TextSpan(children: spans);
-  }
-
-  String extractSnippet(String fullText, String query) {
-    final lowerText = fullText.toLowerCase();
-    final lowerQuery = query.toLowerCase();
-    final index = lowerText.indexOf(lowerQuery);
-
-    if (index != -1) {
-      const int contextLength = 50;
-      int start = index - contextLength;
-      int end = index + lowerQuery.length + contextLength;
-
-      if (start < 0) start = 0;
-      if (end > fullText.length) end = fullText.length;
-
-      String snippet = fullText.substring(start, end);
-
-      if (start > 0) snippet = "...$snippet";
-      if (end < fullText.length) snippet = "$snippet...";
-
-      return snippet.trim();
-    }
-    return fullText.substring(0, fullText.length > 200 ? 200 : fullText.length);
   }
 
   Widget _buildTag(String text) {
@@ -126,137 +144,30 @@ class _SearchhScreenState extends State<SearchhScreen> {
       decoration: BoxDecoration(
         color: AppColors.softBlue,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.softBlue, width: 1),
       ),
       child: Text(
         text,
         style: const TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: AppColors.darkGrey,
+          color: AppColors.primaryBlue,
         ),
       ),
     );
   }
 
-  Widget _buildArticleListItem(
-    Article item, {
-    bool showSnippet = false,
-    String query = '',
-  }) {
-    bool isNetworkUrl =
-        item.imagePath.startsWith('http://') ||
-        item.imagePath.startsWith('https://');
-    bool isBase64Data = item.imagePath.length > 100 && !isNetworkUrl;
-
-    Widget imageWidget;
-
-    if (isNetworkUrl) {
-      imageWidget = Image.network(
-        item.imagePath,
-        width: 84,
-        height: 108,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return const Center(
-            child: Icon(
-              Icons.broken_image,
-              size: 40,
-              color: AppColors.darkGrey,
-            ),
-          );
-        },
-      );
-    } else if (isBase64Data) {
-      try {
-        String base64String = item.imagePath.contains(',')
-            ? item.imagePath.split(',').last
-            : item.imagePath;
-
-        Uint8List imageBytes = base64Decode(base64String);
-
-        imageWidget = Image.memory(
-          imageBytes,
-          width: 84,
-          height: 108,
-          fit: BoxFit.cover,
-        );
-      } catch (e) {
-        debugPrint('Base64 Decode Error: $e');
-        imageWidget = const Center(
-          child: Icon(Icons.error_outline, size: 40, color: AppColors.darkGrey),
-        );
-      }
-    } else {
-      imageWidget = const Center(
-        child: Icon(
-          Icons.image_not_supported,
-          size: 40,
-          color: AppColors.darkGrey,
-        ),
-      );
-    }
-
-    String fullText = '';
-    if (showSnippet) {
-      final sectionsText = item.sections
-          .map((s) {
-            final head = s["heading"] ?? "";
-            final paras = s["paragraphs"] is List
-                ? (s["paragraphs"] as List).join(" ")
-                : (s["paragraphs"] ?? "");
-            return "$head $paras";
-          })
-          .join(" ");
-
-      fullText =
-          "${item.title} ${item.author} ${item.abstractContent ?? ""} $sectionsText";
-    }
-
-    final DateTime articleDate = item.createdAt?.toDate() ?? DateTime.now();
-
+  Widget _buildArticleListItem(Article item, {String query = ''}) {
     final List<String> displayTags = [];
-
-    if (item.kelas != null && item.kelas!.isNotEmpty) {
-      displayTags.add(item.kelas!.toUpperCase());
-    }
-
-    if (item.tags != null) {
-      if (item.tags is String && (item.tags as String).isNotEmpty) {
-        final optionalTags = (item.tags as String)
-            .split(RegExp(r'[,\s]+'))
-            .where(
-              (tag) =>
-                  tag.isNotEmpty &&
-                  tag.toUpperCase() != item.kelas?.toUpperCase(),
-            )
-            .toList();
-        displayTags.addAll(optionalTags);
-      } else if (item.tags is List) {
-        final List<String> tagsList = (item.tags as List)
-            .whereType<String>()
-            .toList();
-
-        final optionalTags = tagsList
-            .where(
-              (tag) =>
-                  tag.isNotEmpty &&
-                  tag.toUpperCase() != item.kelas?.toUpperCase(),
-            )
-            .toList();
-        displayTags.addAll(optionalTags);
-      }
-    }
+    displayTags.add(item.topic.toUpperCase());
+    if (item.tags != null) displayTags.addAll(item.tags!);
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ArticleDetailScreen(articleId: item.id),
-          ),
-        );
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ArticleDetailScreen(articleId: item.id),
+        ),
+      ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
         child: Row(
@@ -268,11 +179,10 @@ class _SearchhScreenState extends State<SearchhScreen> {
                 width: 84,
                 height: 108,
                 color: AppColors.softBlue,
-                child: imageWidget,
+                child: _buildArticleImage(item.imagePath),
               ),
             ),
             const SizedBox(width: 12),
-
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,58 +190,44 @@ class _SearchhScreenState extends State<SearchhScreen> {
                   RichText(
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    text: showSnippet
-                        ? highlightText(item.title, query)
-                        : TextSpan(
-                            text: item.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.black,
-                              fontFamily: 'PlayfairDisplay',
-                            ),
-                          ),
+                    text: highlightText(
+                      item.title,
+                      query,
+                      const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.black,
+                        fontFamily: 'PlayfairDisplay',
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 4),
-
                   RichText(
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    text: showSnippet
-                        ? highlightText(item.author, query)
-                        : TextSpan(
-                            text: item.author,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.darkGrey,
-                              fontFamily: 'PlayfairDisplay',
-                            ),
-                          ),
+                    text: highlightText(
+                      item.author,
+                      query,
+                      const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.darkGrey,
+                        fontFamily: 'PlayfairDisplay',
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
-
-                  if (showSnippet)
-                    RichText(
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      text: highlightText(
-                        extractSnippet(fullText, query),
-                        query,
-                      ),
-                    )
-                  else
-                    Wrap(
-                      spacing: 8.0,
-                      runSpacing: 4.0,
-                      children: displayTags
-                          .map((tag) => _buildTag(tag))
-                          .toList(),
-                    ),
-
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 4.0,
+                    children: displayTags
+                        .take(3)
+                        .map((tag) => _buildTag(tag))
+                        .toList(),
+                  ),
                   const SizedBox(height: 6),
-
                   Text(
-                    "Diunggah: ${_formatDate(articleDate)}",
+                    "Diunggah: ${_formatDate(item.createdAt?.toDate() ?? DateTime.now())}",
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.darkGrey.withOpacity(0.7),
@@ -352,29 +248,24 @@ class _SearchhScreenState extends State<SearchhScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: TextField(
               controller: _controller,
-              onChanged: (value) {
-                setState(() => searchText = value);
-              },
+              onChanged: (value) => setState(() => searchText = value),
               decoration: InputDecoration(
-                hintText: 'Search...',
+                hintText: 'Cari artikel atau topik...',
                 prefixIcon: const Icon(Icons.search),
-
                 suffixIcon: searchText.isNotEmpty
-                    ? GestureDetector(
-                        onTap: () {
+                    ? IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
                           _controller.clear();
                           setState(() => searchText = "");
                         },
-                        child: const Icon(Icons.close),
                       )
                     : null,
-
                 filled: true,
                 fillColor: AppColors.backgroundLight,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(50),
                   borderSide: BorderSide.none,
@@ -382,96 +273,114 @@ class _SearchhScreenState extends State<SearchhScreen> {
               ),
             ),
           ),
-
+          SizedBox(
+            height: 40,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: categories.length,
+              itemBuilder: (context, index) {
+                final cat = categories[index];
+                final isSelected =
+                    searchText.toLowerCase() == cat.toLowerCase();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(cat),
+                    selected: isSelected,
+                    onSelected: (bool selected) {
+                      setState(() {
+                        if (selected) {
+                          _controller.text = cat;
+                          searchText = cat;
+                        } else {
+                          _controller.clear();
+                          searchText = "";
+                        }
+                      });
+                    },
+                    selectedColor: AppColors.primaryBlue,
+                    backgroundColor: const Color.fromARGB(255, 238, 245, 255),
+                    shape: StadiumBorder(side: BorderSide.none),
+                    showCheckmark: false,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : AppColors.black,
+                      fontSize: 12,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
           Expanded(
             child: searchText.isEmpty
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 8,
-                        ),
-                        child: Text(
-                          "Artikel Terbaru",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.black,
-                          ),
-                        ),
-                      ),
-
-                      Expanded(
-                        child: StreamBuilder<List<Article>>(
-                          stream: getLatestArticles(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) {
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: AppColors.primaryBlue,
-                                ),
-                              );
-                            }
-
-                            final latest = snapshot.data!;
-
-                            return ListView.builder(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              itemCount: latest.length,
-                              itemBuilder: (context, index) {
-                                final item = latest[index];
-                                return _buildArticleListItem(
-                                  item,
-                                  showSnippet: false,
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  )
-                : StreamBuilder<List<Article>>(
-                    stream: searchArticles(searchText),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryBlue,
-                          ),
-                        );
-                      }
-
-                      final results = snapshot.data!;
-                      if (results.isEmpty) {
-                        return const Center(
-                          child: Text("Tidak ada artikel yang ditemukan."),
-                        );
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: results.length,
-                        itemBuilder: (context, index) {
-                          final item = results[index];
-                          return _buildArticleListItem(
-                            item,
-                            showSnippet: true,
-                            query: searchText,
-                          );
-                        },
-                      );
-                    },
-                  ),
+                ? _buildLatestSection()
+                : _buildResultsSection(),
           ),
-          SizedBox(height: 10),
         ],
       ),
+    );
+  }
+
+  Widget _buildLatestSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Text(
+            "Artikel Terbaru",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<List<Article>>(
+            stream: getLatestArticles(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(child: Text("Error: ${snapshot.error}"));
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                itemCount: snapshot.data!.length,
+                itemBuilder: (context, index) =>
+                    _buildArticleListItem(snapshot.data![index]),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResultsSection() {
+    return StreamBuilder<List<Article>>(
+      stream: searchArticles(searchText),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}"));
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final results = snapshot.data!;
+        if (results.isEmpty) {
+          return const Center(child: Text("Tidak ada hasil ditemukan."));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: results.length,
+          itemBuilder: (context, index) =>
+              _buildArticleListItem(results[index], query: searchText),
+        );
+      },
     );
   }
 }

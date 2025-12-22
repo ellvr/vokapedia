@@ -28,10 +28,10 @@ Stream<List<Article>> getArticlesByFeature({
       });
 }
 
-Stream<List<Article>> getArticlesByCategory(String category) {
+Stream<List<Article>> getArticlesByTopic(String topicName) {
   return FirebaseFirestore.instance
       .collection('articles')
-      .where('category', isEqualTo: category)
+      .where('topic', isEqualTo: topicName)
       .snapshots()
       .map((snapshot) {
         return snapshot.docs
@@ -51,19 +51,16 @@ Stream<List<Article>> searchArticles(String query) {
         .where((article) {
           final title = article.title.toLowerCase();
           final author = article.author.toLowerCase();
+          final topic = article.topic.toLowerCase();
           final abstractText = (article.abstractContent ?? "").toLowerCase();
 
-          // --- EXTRACT SECTION TEXT ---
           String extractSectionText(List sections) {
             final buffer = StringBuffer();
-
             for (var sec in sections) {
               if (sec is Map) {
                 final heading = (sec["heading"] ?? "").toString().toLowerCase();
                 buffer.write("$heading ");
-
                 final paragraphs = sec["paragraphs"];
-
                 if (paragraphs is List) {
                   buffer.write(
                     paragraphs.map((p) => p.toString().toLowerCase()).join(" "),
@@ -73,13 +70,11 @@ Stream<List<Article>> searchArticles(String query) {
                 }
               }
             }
-
             return buffer.toString();
           }
 
           final sectionText = extractSectionText(article.sections);
-
-          final fullText = "$title $author $abstractText $sectionText";
+          final fullText = "$title $author $topic $abstractText $sectionText";
 
           return fullText.contains(q);
         })
@@ -108,14 +103,15 @@ String extractSnippet(String fullText, String query) {
   return snippet;
 }
 
-
 Stream<List<Article>> getLatestArticles() {
   return FirebaseFirestore.instance
       .collection('articles')
       .orderBy('createdAt', descending: true)
-      .limit(5)
+      .limit(10)
       .snapshots()
-      .map((snap) => snap.docs
-          .map((doc) => Article.fromFirestore(doc.data(), doc.id))
-          .toList());
+      .map(
+        (snap) => snap.docs
+            .map((doc) => Article.fromFirestore(doc.data(), doc.id))
+            .toList(),
+      );
 }
