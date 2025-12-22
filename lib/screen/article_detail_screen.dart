@@ -1,5 +1,3 @@
-// ignore_for_file: unused_field, use_build_context_synchronously, deprecated_member_use, prefer_interpolation_to_compose_strings
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,7 +8,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:share_plus/share_plus.dart';
-
 import 'package:html/parser.dart' show parse;
 
 const String _apkDownloadLink = 'https://clips.id/VokaPediaApps';
@@ -29,7 +26,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   Article? _articleData;
   bool _isArticleSaved = false;
   String _currentUserRole = 'user';
-  final bool _isAbstractExpanded = false;
 
   @override
   void initState() {
@@ -38,7 +34,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   }
 
   Widget _buildArticleImage(String imagePath, {double? width, double? height}) {
-    
     if (imagePath.isEmpty) {
       return Container(
         height: height,
@@ -89,30 +84,22 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             ),
           );
         },
-        errorBuilder: (context, error, stackTrace) {
-          return defaultPlaceholder;
-        },
+        errorBuilder: (context, error, stackTrace) => defaultPlaceholder,
       );
     } else {
       try {
         String base64String = imagePath.contains(',')
             ? imagePath.split(',').last
             : imagePath;
-
         Uint8List imageBytes = base64Decode(base64String);
-
         return Image.memory(
           imageBytes,
           width: width,
           height: height,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint('Image.memory render failed: $error');
-            return defaultPlaceholder;
-          },
+          errorBuilder: (context, error, stackTrace) => defaultPlaceholder,
         );
       } catch (e) {
-        debugPrint('Base64 Decode Error in Detail: $e');
         return defaultPlaceholder;
       }
     }
@@ -123,14 +110,12 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         .collection('articles')
         .doc(widget.articleId)
         .get();
-    if (!doc.exists) {
-      throw Exception("Article not found in database.");
-    }
+    if (!doc.exists) throw Exception("Article not found in database.");
+
     final article = Article.fromFirestore(
       doc.data() as Map<String, dynamic>,
       doc.id,
     );
-
     final user = FirebaseAuth.instance.currentUser;
     bool isSaved = false;
     String role = 'user';
@@ -146,13 +131,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
       ]);
 
-      final savedDoc = futures[0];
-      final userDoc = futures[1];
-
-      isSaved = savedDoc.exists;
-
-      if (userDoc.exists && userDoc.data()!.containsKey('role')) {
-        role = userDoc['role'];
+      isSaved = futures[0].exists;
+      if (futures[1].exists && futures[1].data()!.containsKey('role')) {
+        role = futures[1]['role'];
       }
     }
 
@@ -163,53 +144,35 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         _articleData = article;
       });
     }
-
     return article;
   }
 
   String _getArticleContentPreview(Article article, {int wordLimit = 70}) {
     String fullContent = '';
-
     if (article.abstractContent != null &&
         article.abstractContent!.isNotEmpty) {
       fullContent += '${article.abstractContent!}\n\n';
     }
-
     for (var section in article.sections) {
       final content = section['paragraphs'] ?? section['content'] ?? '';
-      if (content is List) {
-        fullContent +=
-            (section['heading'] ?? '') + ' ' + content.join(' ') + ' ';
-      } else {
-        fullContent +=
-            (section['heading'] ?? '') + ' ' + content.toString() + ' ';
-      }
+      fullContent +=
+          (section['heading'] ?? '') +
+          ' ' +
+          (content is List ? content.join(' ') : content.toString()) +
+          ' ';
     }
-
-    if (fullContent.trim().isEmpty) {
-      return 'Konten artikel belum tersedia.';
-    }
+    if (fullContent.trim().isEmpty) return 'Konten artikel belum tersedia.';
 
     final document = parse(fullContent);
     final String cleanText = document.body!.text;
-
     final words = cleanText.trim().split(RegExp(r'\s+'));
-
-    if (words.length <= wordLimit) {
-      return words.join(' ');
-    }
-
-    final preview = words.sublist(0, wordLimit).join(' ');
-
-    return '$preview...';
+    if (words.length <= wordLimit) return words.join(' ');
+    return '${words.sublist(0, wordLimit).join(' ')}...';
   }
 
   void _shareArticle(Article article) {
     final String shareText =
-        'Yuk, baca artikel menarik dari VokaPedia: "${article.title}" oleh ${article.author}.'
-        '\n\nInstall Aplikasi VokaPedia untuk membaca konten lengkapnya!'
-        '\n$_apkDownloadLink';
-
+        'Yuk, baca artikel menarik dari VokaPedia: "${article.title}" oleh ${article.author}.\n\nInstall Aplikasi VokaPedia untuk membaca konten lengkapnya!\n$_apkDownloadLink';
     Share.share(shareText, subject: 'Artikel VokaPedia: ${article.title}');
   }
 
@@ -230,25 +193,25 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         .doc(user.uid)
         .collection('readingHistory')
         .doc(article.id);
-
     final bool wasSaved = _isArticleSaved;
 
-    if (mounted) {
-      setState(() {
-        _isArticleSaved = !wasSaved;
-      });
-    }
+    setState(() => _isArticleSaved = !wasSaved);
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          wasSaved
+              ? 'Dihapus dari Library.'
+              : 'Berhasil ditambahkan ke Library!',
+        ),
+        duration: const Duration(seconds: 1),
+        backgroundColor: wasSaved ? Colors.red : AppColors.primaryBlue,
+      ),
+    );
 
     try {
       if (wasSaved) {
         await docRef.delete();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Dihapus dari Library.'),
-            duration: Duration(seconds: 1),
-            backgroundColor: Colors.red,
-          ),
-        );
       } else {
         await docRef.set({
           'articleId': article.id,
@@ -258,27 +221,17 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           'createdAt': FieldValue.serverTimestamp(),
           'readingProgress': 0.0,
         }, SetOptions(merge: true));
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Berhasil ditambahkan ke Library!'),
-            duration: Duration(seconds: 2),
-            backgroundColor: AppColors.primaryBlue,
-          ),
-        );
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isArticleSaved = wasSaved;
-        });
+        setState(() => _isArticleSaved = wasSaved);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal: ${e.toString()}. Status tombol dikembalikan.'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -295,11 +248,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.black),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
-        actions: <Widget>[
+        actions: [
           IconButton(
             icon: const Icon(Icons.share, color: AppColors.black),
             onPressed: _articleData != null
@@ -311,33 +262,19 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
       body: FutureBuilder<Article>(
         future: _articleFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error memuat artikel: ${snapshot.error}'),
-            );
-          }
-          if (!snapshot.hasData || _articleData == null) {
+          if (snapshot.hasError)
+            return Center(child: Text('Error: ${snapshot.error}'));
+          if (!snapshot.hasData || _articleData == null)
             return const Center(child: Text('Artikel tidak ditemukan.'));
-          }
-
-          final article = _articleData!;
-
-          return _buildDetailBody(context, article);
+          return _buildDetailBody(context, _articleData!);
         },
       ),
     );
   }
 
   Widget _buildDetailBody(BuildContext context, Article article) {
-    final buttonIcon = _isArticleSaved ? Icons.check : Icons.add;
-    final buttonText = _isArticleSaved ? 'Saved' : 'Library';
-
-    final Color buttonColor = AppColors.black;
-    final Color borderColor = AppColors.black;
-
     return Stack(
       children: [
         Container(
@@ -346,7 +283,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             padding: const EdgeInsets.only(bottom: 100),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
+              children: [
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -413,7 +350,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   endIndent: 20,
                 ),
                 const SizedBox(height: 15),
-
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20.0),
                   child: Text(
@@ -422,7 +358,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   child: Text(
@@ -454,29 +389,22 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 ),
               ],
             ),
-            padding: const EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 10,
-              bottom: 20,
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
             child: Row(
-              children: <Widget>[
+              children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ArticleReadingScreen(
-                            articleId: article.id,
-                            articleTitle: article.title,
-                            articleAuthor: article.author,
-                            imagePath: article.imagePath,
-                          ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ArticleReadingScreen(
+                          articleId: article.id,
+                          articleTitle: article.title,
+                          articleAuthor: article.author,
+                          imagePath: article.imagePath,
                         ),
-                      );
-                    },
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.black,
                       foregroundColor: AppColors.white,
@@ -506,8 +434,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   child: OutlinedButton(
                     onPressed: () => _toggleLibraryStatus(article),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: buttonColor,
-                      side: BorderSide(color: borderColor, width: 2),
+                      foregroundColor: AppColors.black,
+                      side: const BorderSide(color: AppColors.black, width: 2),
                       minimumSize: const Size(double.infinity, 50),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -519,10 +447,13 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(buttonIcon, size: 20),
+                        Icon(
+                          _isArticleSaved ? Icons.check : Icons.add,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Text(
-                          buttonText,
+                          _isArticleSaved ? 'Saved' : 'Library',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

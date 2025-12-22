@@ -292,12 +292,12 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(22),
               child: CircleAvatar(
                 radius: 22,
-                backgroundColor: AppColors.softBlue,
+                backgroundColor: Color(0xffd9d9),
                 backgroundImage: _userPhotoUrl != null
                     ? NetworkImage(_userPhotoUrl!)
                     : null,
                 child: _userPhotoUrl == null
-                    ? const Icon(Icons.person, color: AppColors.primaryBlue)
+                    ? const Icon(Icons.person, color: AppColors.black)
                     : null,
               ),
             ),
@@ -393,7 +393,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                 
                                   const SizedBox(height: 5),
                                   Text(
                                     item.title,

@@ -16,19 +16,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   final List<Map<String, String>> onboardingData = [
     {
-      "image": "assets/img/onboard1.svg",
+      "image": "assets/img/on1.png",
       "title": "Halo, Selamat Datang di VokaPedia",
       "desc":
           "Platform pembelajaran yang menyediakan materi Bahasa Indonesia dalam arsip digital yang lebih mudah diakses.",
     },
     {
-      "image": "assets/img/onboard2.svg",
+      "image": "assets/img/on2.png",
       "title": "Highlight Bagian Penting, Simpan untuk Nanti",
       "desc":
           "Sorot kalimat yang menurutmu penting, lalu simpan ke bookmark agar kamu bisa kembali ke bagian tersebut tanpa perlu mencari ulang.",
     },
     {
-      "image": "assets/img/onboard3.svg",
+      "image": "assets/img/on3.png",
       "title": "Yuk Bangun Ruang Belajarmu Sendiri!",
       "desc":
           "Simpan materi favoritmu dan buka kembali kapan saja. Yuk mulai perjalanan belajar sesuai dengan ritmemu.",
@@ -97,7 +97,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 0),
                         child: Center(
-                          child: SvgPicture.asset(
+                          child: Image.asset(
                             onboardingData[i]["image"]!,
                             fit: BoxFit.contain,
                           ),

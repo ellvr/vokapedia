@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:vokapedia/screen/auth/login_screen.dart';
 import 'package:vokapedia/screen/home_screen.dart';
+import 'package:vokapedia/screen/onboarding_screen.dart';
 import '../utils/color_constants.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -67,21 +68,24 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _checkAuthStatus() async {
     final user = FirebaseAuth.instance.currentUser;
-    Widget destinationScreen;
-    String userRole = 'user';
 
     if (user != null) {
-      userRole = await _fetchUserRole(user.uid);
-      destinationScreen = HomeScreen(userRole: userRole);
+      // JIKA SUDAH LOGIN: Langsung tarik role dan ke Home
+      String userRole = await _fetchUserRole(user.uid);
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HomeScreen(userRole: userRole)),
+        );
+      }
     } else {
-      destinationScreen = const LoginScreen();
-    }
-
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => destinationScreen),
-      );
+      // JIKA BELUM LOGIN: Arahkan ke Onboarding
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        );
+      }
     }
   }
 
@@ -108,12 +112,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 width: 2,
                 height: 48,
                 margin: const EdgeInsets.only(left: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryBlue,
-                  borderRadius: BorderRadius.circular(0),
-                ),
+                decoration: BoxDecoration(color: AppColors.primaryBlue),
               ),
-            )
+            ),
           ],
         ),
       ),

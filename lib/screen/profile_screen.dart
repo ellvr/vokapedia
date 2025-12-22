@@ -23,7 +23,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _userEmail = 'email tidak tersedia';
   String? _userPhotoUrl;
   List<String> _userInterests = [];
-  final User? user = FirebaseAuth.instance.currentUser;
 
   @override
   void initState() {
@@ -32,24 +31,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserProfileData() async {
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
       DocumentSnapshot snap = await FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.uid)
+          .doc(user.uid)
           .get();
 
-      if (snap.exists) {
-        Map<String, dynamic> data = snap.data() as Map<String, dynamic>;
-        if (mounted) {
-          setState(() {
-            _userName = data['name'] ?? user!.displayName ?? 'Nama Pengguna';
-            _userEmail = user!.email ?? 'email tidak tersedia';
-            _userPhotoUrl = user!.photoURL;
+      if (mounted) {
+        setState(() {
+          _userEmail = user.email ?? 'email tidak tersedia';
+          _userPhotoUrl = user.photoURL;
+
+          if (snap.exists) {
+            Map<String, dynamic> data = snap.data() as Map<String, dynamic>;
+            _userName = data['name'] ?? user.displayName ?? 'Nama Pengguna';
             _userInterests = List<String>.from(data['interests'] ?? []);
-          });
-        }
+          } else {
+            _userName = user.displayName ?? 'Nama Pengguna';
+          }
+        });
       }
     } catch (e) {}
   }
@@ -140,17 +143,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   onPressed: () async {
-                    await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user!.uid)
-                        .update({
-                          'interests': tempSelected,
-                          'hasSetInterests': true,
-                        });
-                    if (mounted) {
-                      setState(() {
-                        _userInterests = tempSelected;
-                      });
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.uid)
+                          .update({
+                            'interests': tempSelected,
+                            'hasSetInterests': true,
+                          });
+                      if (mounted)
+                        setState(() => _userInterests = tempSelected);
                     }
                     Navigator.pop(context);
                   },
@@ -197,9 +200,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Batal', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
@@ -280,7 +281,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final double topContainerHeight = MediaQuery.of(context).size.height * 0.25;
-
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
@@ -338,14 +338,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 size: 15,
                                 color: Colors.white,
                               ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const DataDiriScreen(),
-                                  ),
-                                );
-                              },
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const DataDiriScreen(),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -397,64 +395,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: "Data Diri",
                     subtitle: "Ubah data diri di sini",
                     icon: Icons.person,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const DataDiriScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const DataDiriScreen()),
+                    ),
                   ),
                   _buildSettingTile(
                     title: "Keamanan dan Privasi",
                     subtitle: "Pelajari keamanan dan privasi",
                     icon: Icons.lock,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const KeamananPrivasiScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const KeamananPrivasiScreen(),
+                      ),
+                    ),
                   ),
                   _buildSettingTile(
                     title: "Tentang VokaPedia",
                     subtitle: "Ketahui lebih dalam tentang VocaPedia",
                     icon: Icons.info,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TentangVocaPediaScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TentangVocaPediaScreen(),
+                      ),
+                    ),
                   ),
                   _buildSettingTile(
                     title: "FAQ & Panduan",
                     subtitle: "Lihat panduan untuk penggunaan optimal",
                     icon: Icons.help,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const FAQScreen()),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const FAQScreen()),
+                    ),
                   ),
                   _buildSettingTile(
                     title: "Laporkan Masalah",
                     subtitle: "Laporkan ketika menemukan masalah",
                     icon: Icons.error,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const LaporkanMasalahScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LaporkanMasalahScreen(),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(

@@ -1,5 +1,3 @@
-// ignore_for_file: curly_braces_in_flow_control_structures
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,11 +18,27 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
   bool _isSubmitting = false;
 
   Future<void> _submitQuiz(List<Question> questions, bool isLate) async {
+    bool allFilled = questions.every(
+      (q) => _controllers[q.id]?.text.trim().isNotEmpty ?? false,
+    );
+
+    if (!allFilled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Harap isi semua jawaban sebelum mengirim!"),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     final user = FirebaseAuth.instance.currentUser;
     List<Map<String, dynamic>> answers = questions
         .map(
-          (q) => {'questionId': q.id, 'answer': _controllers[q.id]?.text ?? ''},
+          (q) => {
+            'questionId': q.id,
+            'answer': _controllers[q.id]?.text.trim() ?? '',
+          },
         )
         .toList();
 
@@ -72,8 +86,15 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
         builder: (context, subSnap) {
           bool isAnswered = subSnap.hasData && subSnap.data!.docs.isNotEmpty;
           Map<String, String> prevAnswers = {};
+          String submissionStatus = '';
+          dynamic score;
+          String feedback = '';
+
           if (isAnswered) {
             var data = subSnap.data!.docs.first.data() as Map<String, dynamic>;
+            submissionStatus = data['status'] ?? 'submitted';
+            score = data['score'];
+            feedback = data['feedback'] ?? '';
             List answers = data['answers'] ?? [];
             for (var a in answers) prevAnswers[a['questionId']] = a['answer'];
           }
@@ -98,21 +119,89 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
 
               return Column(
                 children: [
-                  if (isAnswered)
+                  if (isAnswered) ...[
                     Container(
                       width: double.infinity,
-                      color: Colors.green.shade50,
+                      color: submissionStatus == 'submitted_late'
+                          ? Colors.red.shade50
+                          : Colors.green.shade50,
                       padding: const EdgeInsets.all(10),
-                      child: const Text(
-                        "Yayy kamu sudah mengerjakan kuis ini!",
+                      child: Text(
+                        submissionStatus == 'submitted_late'
+                            ? "Kuis ini diserahkan terlambat"
+                            : "Yayy kamu sudah mengerjakan kuis ini!",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.green,
+                          color: submissionStatus == 'submitted_late'
+                              ? Colors.red
+                              : Colors.green,
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),
                       ),
                     ),
+                    if (score != null)
+                      Container(
+                        margin: const EdgeInsets.all(15),
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryBlue.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(
+                            color: AppColors.primaryBlue.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  "Nilai Akhir:",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  "$score",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 24,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (feedback.isNotEmpty) ...[
+                              const Divider(height: 20),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  "Feedback Guru:",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  feedback,
+                                  style: const TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                  ],
                   if (!isAnswered && isOverdue)
                     Container(
                       width: double.infinity,
@@ -130,7 +219,7 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                     ),
                   Expanded(
                     child: ListView.builder(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
                       itemCount: questions.length,
                       itemBuilder: (context, index) {
                         final q = questions[index];
@@ -182,8 +271,18 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                                     decoration: InputDecoration(
                                       hintText:
                                           "Ketik jawaban esai kamu di sini...",
-                                      border: OutlineInputBorder(
+                                      enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: AppColors.primaryBlue,
+                                          width: 2,
+                                        ),
                                       ),
                                       filled: true,
                                       fillColor: Colors.grey.shade50,
@@ -209,6 +308,9 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                             backgroundColor: isOverdue
                                 ? Colors.orange
                                 : AppColors.primaryBlue,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                           child: _isSubmitting
                               ? const CircularProgressIndicator(
